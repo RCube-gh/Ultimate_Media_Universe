@@ -1,0 +1,67 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 🎬 The Core Model for ALL content
+model MediaItem {
+  id          String   @id @default(cuid())
+  
+  // 📝 Basic Info
+  title       String
+  description String?  // User's memo or site description
+  url         String?  // Original URL (Source)
+  thumbnail   String?  // Path to local thumb or remote URL
+  
+  // 🏷️ Classification
+  type        String   // "VIDEO", "MANGA", "AUDIO", "LINK", "IMAGE"
+  
+  // 💾 State
+  isArchived  Boolean  @default(false) 
+  filePath    String?  @unique // Path must be unique to prevent duplicate imports
+  
+  // 🧩 Flexible Data
+  metadata    String?  // JSON string: { pages: [{ file: "1.jpg", w: 800, h: 1200 }, ...] }
+
+  // 📊 Stats & Meta
+  duration    Int?     // Seconds (Video/Audio)
+  pages       Int?     // Page count (Manga)
+  size        BigInt?  // File size in bytes
+  
+  rating      Int      @default(0) // 0-5 stars
+  viewCount   Int      @default(0) // How many times played
+  isFavorite  Boolean  @default(false)
+  
+  publishedAt DateTime? // Original release date
+  createdAt   DateTime @default(now()) // Added to library
+  updatedAt   DateTime @updatedAt
+
+  tags        Tag[]    // Relations
+  markers     Marker[] // 📍 Scene Markers
+}
+
+model Tag {
+  id    String      @id @default(cuid())
+  name  String      @unique
+  items MediaItem[]
+}
+
+// 📍 Checkpoints for Videos/Audio
+model Marker {
+  id        String    @id @default(cuid())
+  item      MediaItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId    String
+  
+  time      Int       // Seconds
+  label     String    // "Cum", "Cowgirl", etc.
+  icon      String?   // Emoji: "💦", "🐎"
+  
+  createdAt DateTime @default(now())
+}
