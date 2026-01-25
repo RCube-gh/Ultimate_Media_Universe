@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import MangaReader from "@/components/MangaReader";
+import { MangaDetailsActions } from "@/components/MangaDetailsActions";
+import { MarkerStats } from "@/components/MarkerStats";
 
 // No caching for reader to ensure fresh access
 export const revalidate = 0;
@@ -82,6 +84,7 @@ export default async function MangaReaderPage({ params }: PageProps) {
                     {/* Reader Container */}
                     <div className="w-full h-[85vh] bg-black rounded-lg overflow-hidden shadow-2xl border border-zinc-800 relative z-10 ring-1 ring-white/10">
                         <MangaReader
+                            id={item.id}
                             title={item.title}
                             pages={pages}
                             backUrl="/manga"
@@ -100,17 +103,16 @@ export default async function MangaReaderPage({ params }: PageProps) {
                                 <span className="px-2 py-1 bg-zinc-800 rounded text-xs font-mono">{pages.length} Pages</span>
                                 <span>•</span>
                                 <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                                <MarkerStats id={item.id} />
                             </div>
 
                             {/* Actions */}
-                            <div className="flex items-center gap-2">
-                                <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full font-medium text-sm transition-colors text-pink-200 hover:text-pink-100">
-                                    ♥ Like
-                                </button>
-                                <button className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-full font-bold text-sm transition-colors shadow-lg shadow-pink-900/20">
-                                    💧 Cum
-                                </button>
-                            </div>
+                            {/* Actions */}
+                            <MangaDetailsActions
+                                id={item.id}
+                                initialLikes={item.rating || 0}
+                                initialIsFavorite={item.isFavorite}
+                            />
                         </div>
 
                         {/* Description */}
