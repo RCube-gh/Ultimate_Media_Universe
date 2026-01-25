@@ -4,12 +4,22 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward } from "lucide-react";
 
 interface VideoPlayerProps {
+    id: string; // MediaItem ID for markers
     src: string;
     poster?: string;
     className?: string;
+    initialLastPos?: number;
+    serverDuration?: number; // Needed for resume check
 }
 
-export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
+type Marker = {
+    id: string;
+    time: number;
+    label: string;
+    icon: string;
+};
+
+export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, serverDuration = 0 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -19,6 +29,8 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(1);
     const [isMuted, setIsMuted] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1);
+    const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showControls, setShowControls] = useState(true);
 
@@ -26,16 +38,78 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
     const [isDragging, setIsDragging] = useState(false);
 
     // ✨ Overlay Feedback State
-    const [feedbackIcon, setFeedbackIcon] = useState<"play" | "pause" | "volume" | "forward" | "backward" | null>(null);
+    const [feedbackIcon, setFeedbackIcon] = useState<React.ReactNode | null>(null);
     const feedbackTimeoutRef = useRef<NodeJS.Timeout>(null);
     const controlsTimeoutRef = useRef<NodeJS.Timeout>(null);
 
+    // 📍 Markers State
+    const [markers, setMarkers] = useState<Marker[]>([]);
+    const [isMarkerModalOpen, setIsMarkerModalOpen] = useState(false);
+    const [markerLabel, setMarkerLabel] = useState("");
+    const [markerIcon, setMarkerIcon] = useState("💦"); // Default
+
+    // 🔁 AB Loop State
+    const [loopStart, setLoopStart] = useState<number | null>(null);
+    const [loopEnd, setLoopEnd] = useState<number | null>(null);
+
+    // 💾 Resume State
+    const [showResumeToast, setShowResumeToast] = useState(false);
+    const lastSaveTimeRef = useRef(0);
+
+    // 🧬 Fetch Markers
+    useEffect(() => {
+        if (!id) return;
+        fetch(`/api/media/${id}/markers`)
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) setMarkers(data);
+            })
+            .catch(err => console.error("Failed to load markers", err));
+    }, [id]);
+
+    // 💾 Save Marker
+    const saveMarker = async () => {
+        if (!videoRef.current || !id) return;
+
+        const time = videoRef.current.currentTime;
+        const newMarker = { time, label: markerLabel, icon: markerIcon };
+
+        try {
+            const res = await fetch(`/api/media/${id}/markers`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newMarker),
+            });
+
+            if (res.ok) {
+                const saved = await res.json();
+                setMarkers(prev => [...prev, saved].sort((a, b) => a.time - b.time));
+                setIsMarkerModalOpen(false);
+                setMarkerLabel("");
+                setIsPlaying(true); // Resume
+                videoRef.current.play();
+                triggerFeedback("play");
+            }
+        } catch (e) {
+            console.error("Failed to save marker", e);
+        }
+    };
+
     // Helper: Trigger Feedback
-    const triggerFeedback = useCallback((type: "play" | "pause" | "volume" | "forward" | "backward") => {
-        setFeedbackIcon(type);
+    const triggerFeedback = useCallback((content: React.ReactNode) => {
+        setFeedbackIcon(content);
         if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
         feedbackTimeoutRef.current = setTimeout(() => setFeedbackIcon(null), 600);
     }, []);
+
+    // 👻 Controls Visibility Helper
+    const showControlsTemporarily = useCallback(() => {
+        setShowControls(true);
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        if (isPlaying) {
+            controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2000);
+        }
+    }, [isPlaying]);
 
     // 🎮 Core Logic
     const togglePlay = useCallback(() => {
@@ -44,10 +118,10 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
 
         if (video.paused) {
             video.play();
-            triggerFeedback("play");
+            triggerFeedback(<Play size={48} fill="currentColor" />);
         } else {
             video.pause();
-            triggerFeedback("pause");
+            triggerFeedback(<Pause size={48} fill="currentColor" />);
         }
     }, [triggerFeedback]);
 
@@ -79,6 +153,7 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
     }, [isDragging]);
 
 
+
     const skipTime = useCallback((seconds: number) => {
         const video = videoRef.current;
         if (!video || !video.duration) return;
@@ -87,7 +162,7 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
         video.currentTime = newTime;
         setCurrentTime(newTime);
 
-        triggerFeedback(seconds > 0 ? "forward" : "backward");
+        triggerFeedback(seconds > 0 ? <SkipForward size={48} fill="currentColor" /> : <SkipBack size={48} fill="currentColor" />);
     }, [triggerFeedback]);
 
     const toggleMute = useCallback(() => {
@@ -102,6 +177,32 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
             setVolume(0.5);
         }
     }, []);
+
+    const changeSpeed = useCallback((delta?: number, exact?: number) => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        let newRate;
+        if (exact) {
+            newRate = exact;
+        } else if (delta) {
+            // Increment/Decrement mode
+            newRate = Math.min(Math.max(video.playbackRate + delta, 0.25), 3.0);
+        } else {
+            // Cycle mode (UI Click) - fallback
+            newRate = video.playbackRate === 1 ? 1.5 : 1;
+        }
+
+        video.playbackRate = newRate;
+        setPlaybackRate(newRate);
+        setShowSpeedMenu(false); // Close menu
+        triggerFeedback(
+            <div className="flex flex-col items-center">
+                <span className="text-3xl font-bold">{newRate}x</span>
+                <span className="text-xs">Speed</span>
+            </div>
+        );
+    }, [triggerFeedback]);
 
     // 🎹 Keyboard Shortcuts
     useEffect(() => {
@@ -121,6 +222,9 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
             const video = videoRef.current;
             if (!video) return;
 
+            // Show controls on any valid interaction
+            showControlsTemporarily();
+
             switch (e.key.toLowerCase()) {
                 case ' ':
                 case 'k':
@@ -134,6 +238,32 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
                 case 'm':
                     e.preventDefault();
                     toggleMute();
+                    break;
+                case 'escape':
+                    if (isMarkerModalOpen) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsMarkerModalOpen(false);
+                        setIsPlaying(true);
+                        if (videoRef.current) videoRef.current.play();
+                    }
+                    break;
+                case 'p':
+                    e.preventDefault();
+                    if (videoRef.current) {
+                        if (isMarkerModalOpen) {
+                            // Close
+                            setIsMarkerModalOpen(false);
+                            setIsPlaying(true);
+                            videoRef.current.play();
+                        } else {
+                            // Open
+                            videoRef.current.pause();
+                            setIsPlaying(false);
+                            setMarkerLabel("");
+                            setIsMarkerModalOpen(true);
+                        }
+                    }
                     break;
                 case 'arrowleft':
                     e.preventDefault();
@@ -159,13 +289,87 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
                     e.preventDefault();
                     if (video.volume > 0) video.volume = Math.max(0, video.volume - 0.1);
                     break;
+                case '>':
+                case '.':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        changeSpeed(0.25);
+                    }
+                    break;
+                case '<':
+                case ',':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        changeSpeed(-0.25);
+                    }
+                    break;
+                case 'a':
+                    // Set Loop Start
+                    if (videoRef.current) {
+                        setLoopStart(videoRef.current.currentTime);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center">
+                                <span className="text-4xl font-bold">A</span>
+                                <span className="text-sm">Loop Start</span>
+                            </div>
+                        );
+                    }
+                    break;
+                case 'b':
+                    // Set Loop End
+                    if (videoRef.current) {
+                        setLoopEnd(videoRef.current.currentTime);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center">
+                                <span className="text-4xl font-bold">B</span>
+                                <span className="text-sm">Loop End</span>
+                            </div>
+                        );
+                    }
+                    break;
+                case '\\':
+                case 'delete':
+                case 'backspace':
+                case 'c':
+                    // Clear Loop
+                    if (loopStart !== null || loopEnd !== null) {
+                        setLoopStart(null);
+                        setLoopEnd(null);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center">
+                                <span className="text-4xl font-bold">🗑️</span>
+                                <span className="text-sm">Loop Cleared</span>
+                            </div>
+                        );
+                    }
+                    break;
+                default:
+                    // Numeric Seeking (0-9)
+                    if (!isNaN(parseInt(e.key)) && e.key.length === 1) {
+                        e.preventDefault();
+                        const percent = parseInt(e.key) / 10;
+                        if (videoRef.current && duration) {
+                            const newTime = duration * percent;
+                            videoRef.current.currentTime = newTime;
+                            setCurrentTime(newTime);
+                            triggerFeedback(
+                                <div className="flex flex-col items-center">
+                                    <span className="text-3xl font-bold">{parseInt(e.key) * 10}%</span>
+                                </div>
+                            );
+                        }
+                    }
+                    break;
             }
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [togglePlay, skipTime, toggleMute]);
+    }, [togglePlay, skipTime, toggleMute, isMarkerModalOpen, loopStart, loopEnd, showControlsTemporarily]);
 
+    // Fullscreen Toggle
+
+    // Fullscreen Toggle
     // Fullscreen Toggle
     const toggleFullscreen = useCallback(() => {
         if (!document.fullscreenElement && containerRef.current) {
@@ -177,6 +381,82 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
         }
     }, []);
 
+    // Sync Fullscreen State (Browser driven)
+    useEffect(() => {
+        const handleFsChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener("fullscreenchange", handleFsChange);
+        return () => document.removeEventListener("fullscreenchange", handleFsChange);
+    }, []);
+
+    // 💾 Resume Logic (On Mount)
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        // 1. Check if "Finished" (Near end)
+        // If last pos is within 15s of end OR > 95% watched
+        const isNearEnd = serverDuration > 0 && (
+            initialLastPos > serverDuration - 15 ||
+            initialLastPos > serverDuration * 0.95
+        );
+
+        if (isNearEnd) {
+            // Treat as finished -> Start from 0
+            video.currentTime = 0;
+            setCurrentTime(0);
+            // Optional: Update DB to 0 immediately so it sticks
+            fetch(`/api/media/${id}/progress`, {
+                method: "POST",
+                body: JSON.stringify({ time: 0 }),
+            }).catch(console.error);
+            return;
+        }
+
+
+        // 2. Normal Resume (Check Settings)
+        const savedConfig = localStorage.getItem("fapflix-config");
+        let shouldResume = true;
+        if (savedConfig) {
+            try {
+                const parsed = JSON.parse(savedConfig);
+                if (parsed.autoResume === false) shouldResume = false;
+            } catch (e) { /* ignore */ }
+        }
+
+        if (shouldResume && initialLastPos > 5) {
+            video.currentTime = initialLastPos;
+            setCurrentTime(initialLastPos);
+            setShowResumeToast(true);
+
+            // Hide toast after 8s
+            const timer = setTimeout(() => setShowResumeToast(false), 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [initialLastPos, serverDuration, id]);
+
+    // 💾 Progress Saving Helper
+    const saveProgress = useCallback((time: number) => {
+        fetch(`/api/media/${id}/progress`, {
+            method: "POST",
+            body: JSON.stringify({ time }),
+        }).catch(e => console.error("Save progress failed", e));
+        lastSaveTimeRef.current = time;
+    }, [id]);
+
+    // 💾 Save on Interval (Crash Protection) & Pause
+    useEffect(() => {
+        if (!isPlaying) return;
+        const interval = setInterval(() => {
+            const video = videoRef.current;
+            if (video && Math.abs(video.currentTime - lastSaveTimeRef.current) > 2) {
+                saveProgress(video.currentTime);
+            }
+        }, 3000); // Check every 3s
+        return () => clearInterval(interval);
+    }, [isPlaying, saveProgress]);
+
     // ⏳ Event Listeners
     useEffect(() => {
         const video = videoRef.current;
@@ -184,7 +464,16 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
 
         const updateTime = () => {
             if (!isDragging) {
-                setCurrentTime(video.currentTime);
+                const t = video.currentTime;
+                // 🔁 Loop Check
+                if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
+                    if (t >= loopEnd) {
+                        video.currentTime = loopStart;
+                        setCurrentTime(loopStart);
+                        return;
+                    }
+                }
+                setCurrentTime(t);
             }
         };
         const updateDuration = () => {
@@ -193,11 +482,15 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
             }
         };
         const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
+        const onPause = () => {
+            setIsPlaying(false);
+            if (video) saveProgress(video.currentTime); // 💾 Save immediately on pause
+        };
         const onVolumeChange = () => {
             setVolume(video.volume);
             setIsMuted(video.muted);
         };
+        const onRateChange = () => setPlaybackRate(video.playbackRate);
 
         video.addEventListener("timeupdate", updateTime);
         video.addEventListener("loadedmetadata", updateDuration);
@@ -205,6 +498,7 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
         video.addEventListener("play", onPlay);
         video.addEventListener("pause", onPause);
         video.addEventListener("volumechange", onVolumeChange);
+        video.addEventListener("ratechange", onRateChange);
 
         // 🚀 CRITICAL FIX: Check manually immediately in case events fired already
         if (video.readyState >= 1) { // HAVE_METADATA
@@ -221,17 +515,12 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("volumechange", onVolumeChange);
+            video.removeEventListener("ratechange", onRateChange);
         };
-    }, [isDragging]);
+    }, [isDragging, loopStart, loopEnd]);
 
     // 👻 Mouse Movement
-    const handleMouseMove = () => {
-        setShowControls(true);
-        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-        if (isPlaying) {
-            controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2000);
-        }
-    };
+    const handleMouseMove = () => showControlsTemporarily();
 
     const formatTime = (time: number) => {
         if (isNaN(time)) return "0:00";
@@ -262,13 +551,98 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
             />
 
+            {/* 📍 Marker Creation Modal */}
+            {isMarkerModalOpen && (
+                <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-zinc-900 border border-pink-500/50 p-6 rounded-2xl shadow-2xl w-full max-w-sm space-y-4">
+                        <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                            <span>📍</span> Add Scene Marker
+                        </h3>
+
+                        {/* Emoji Picker (Simple) */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                            {["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"].map(emoji => (
+                                <button
+                                    key={emoji}
+                                    onClick={() => setMarkerIcon(emoji)}
+                                    className={`text-2xl p-2 rounded-lg transition-colors ${markerIcon === emoji ? "bg-pink-600" : "bg-zinc-800 hover:bg-zinc-700"}`}
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
+
+                        <input
+                            type="text"
+                            placeholder="Label (optional)..."
+                            className="w-full bg-black/50 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:border-pink-500 outline-none"
+                            value={markerLabel}
+                            onChange={(e) => setMarkerLabel(e.target.value)}
+                            onKeyDown={(e) => {
+                                e.stopPropagation(); // Stop bubbling to global
+                                if (e.key === 'Enter') saveMarker();
+                                if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    setIsMarkerModalOpen(false);
+                                    if (videoRef.current) {
+                                        setIsPlaying(true);
+                                        videoRef.current.play();
+                                    }
+                                }
+                            }}
+                        />
+
+                        <div className="flex justify-end gap-2 text-sm">
+                            <button onClick={() => setIsMarkerModalOpen(false)} className="px-4 py-2 text-zinc-400 hover:text-white">Cancel</button>
+                            <button onClick={saveMarker} className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-lg font-bold">Save Marker</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {feedbackIcon && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
-                    <div className="bg-black/50 text-white rounded-full p-6 animate-in fade-in zoom-in duration-200 backdrop-blur-sm">
-                        {feedbackIcon === "play" && <Play size={48} fill="currentColor" />}
-                        {feedbackIcon === "pause" && <Pause size={48} fill="currentColor" />}
-                        {feedbackIcon === "forward" && <SkipForward size={48} fill="currentColor" />}
-                        {feedbackIcon === "backward" && <SkipBack size={48} fill="currentColor" />}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[100]">
+                    <div className="bg-black/70 text-white rounded-2xl p-6 animate-in fade-in zoom-in duration-200 backdrop-blur-sm shadow-2xl border border-white/10">
+                        {feedbackIcon}
+                    </div>
+                </div>
+            )}
+
+            {/* 💾 Resume Toast */}
+            {showResumeToast && (
+                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[90] animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="bg-zinc-900/90 border border-pink-500/30 backdrop-blur-md text-white pl-6 pr-2 py-0 rounded-full shadow-2xl flex items-center gap-4 h-12">
+                        <div className="flex flex-col py-1">
+                            <span className="text-xs text-pink-200 font-bold">Resumed from {formatTime(initialLastPos || 0)}</span>
+                            <span className="text-[10px] text-zinc-400">Welcome back!</span>
+                        </div>
+                        <div className="h-8 w-[1px] bg-white/20"></div>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (videoRef.current) {
+                                    videoRef.current.currentTime = 0;
+                                    setCurrentTime(0);
+                                    setShowResumeToast(false);
+                                    triggerFeedback(
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-3xl font-bold">↺</span>
+                                            <span className="text-xs">Replay</span>
+                                        </div>
+                                    );
+                                }
+                            }}
+                            className="text-sm font-bold hover:text-pink-400 hover:bg-white/10 -my-3 py-3 px-3 transition-colors flex items-center gap-2 rounded-r-full"
+                        >
+                            <span className="text-lg">↺</span>
+                            <span>Start Over</span>
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setShowResumeToast(false); }}
+                            className="ml-2 text-zinc-500 hover:text-white"
+                        >
+                            ✕
+                        </button>
                     </div>
                 </div>
             )}
@@ -281,7 +655,72 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
                 {/* 📏 SEEK BAR */}
                 <div className="relative w-full h-2 group/seek cursor-pointer mb-4 flex items-center">
                     {/* Track */}
-                    <div className="absolute inset-0 bg-white/20 rounded-full"></div>
+                    <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
+                        {/* 🔁 Loop Region */}
+                        {loopStart !== null && loopEnd !== null && loopEnd > loopStart && (
+                            <div
+                                className="absolute top-0 bottom-0 bg-blue-500/60 pointer-events-none z-10"
+                                style={{
+                                    left: `${(loopStart / (duration || 1)) * 100}%`,
+                                    width: `${((loopEnd - loopStart) / (duration || 1)) * 100}%`
+                                }}
+                            />
+                        )}
+                        {/* Loop Start Point (A) */}
+                        {loopStart !== null && (
+                            <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-20 pointer-events-none"
+                                style={{ left: `${(loopStart / (duration || 1)) * 100}%` }}
+                            />
+                        )}
+                        {/* Loop End Point (B) */}
+                        {loopEnd !== null && (
+                            <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-20 pointer-events-none"
+                                style={{ left: `${(loopEnd / (duration || 1)) * 100}%` }}
+                            />
+                        )}
+                    </div>
+
+                    {/* 📍 Markers Layer (Outside overflow-hidden) */}
+                    <div className="absolute inset-0 pointer-events-none">
+                        {markers.map(m => (
+                            <div
+                                key={m.id}
+                                // Hitbox Container (Wider than visible marker)
+                                className="absolute top-0 bottom-0 w-4 -ml-2 z-[60] flex items-center justify-center cursor-pointer group/marker pointer-events-auto"
+                                style={{ left: `${(m.time / (duration || 1)) * 100}%` }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (videoRef.current) {
+                                        videoRef.current.currentTime = m.time;
+                                        setCurrentTime(m.time);
+                                        videoRef.current.play();
+                                    }
+                                }}
+                            >
+                                {/* Visual Marker (Inner) */}
+                                <div className="w-1 h-full bg-yellow-400 rounded-full shadow-sm transition-all duration-200 group-hover/marker:w-1.5 group-hover/marker:h-[120%] group-hover/marker:bg-pink-400 group-hover/marker:shadow-pink-500/50"></div>
+                                {/* Tooltip (Unified Box Mode) */}
+                                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-0 group-hover/marker:opacity-100 transition-all duration-200 pointer-events-none z-[100] transform translate-y-2 group-hover/marker:translate-y-0 text-shadow-sm">
+                                    <div className="bg-zinc-900/90 backdrop-blur-md border border-pink-500/30 p-3 rounded-xl shadow-2xl flex flex-col items-center gap-1 min-w-[100px]">
+                                        {/* Big Emoji */}
+                                        <div className="text-4xl drop-shadow-md pb-1">
+                                            {m.icon}
+                                        </div>
+
+                                        {/* Info */}
+                                        <div className="flex flex-col items-center border-t border-white/10 w-full pt-1">
+                                            <span className="font-bold text-pink-200 text-sm whitespace-nowrap">{m.label}</span>
+                                            <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
+                                                {Math.floor(m.time / 60)}:{Math.floor(m.time % 60).toString().padStart(2, '0')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                     {/* Progress */}
                     <div
                         className="absolute top-0 left-0 h-full bg-pink-600 rounded-full pointer-events-none"
@@ -352,6 +791,44 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
 
                         <div className="text-sm font-mono font-medium text-zinc-300 select-none">
                             {formatTime(currentTime)} / {formatTime(duration)}
+                        </div>
+
+                        {/* ⏩ Playback Speed Menu */}
+                        <div className="relative">
+                            {/* Backdrop for click outside */}
+                            {showSpeedMenu && (
+                                <div
+                                    className="fixed inset-0 z-[65]"
+                                    onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(false); }}
+                                ></div>
+                            )}
+
+                            {showSpeedMenu && (
+                                <div className="absolute bottom-full right-0 mb-2 bg-black/90 border border-zinc-700 rounded-lg shadow-xl p-1 flex flex-col gap-0.5 min-w-[100px] z-[70] animate-in fade-in slide-in-from-bottom-2">
+                                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
+                                        <button
+                                            key={rate}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                changeSpeed(undefined, rate);
+                                            }}
+                                            className={`flex items-center justify-between px-3 py-2 text-sm rounded hover:bg-white/10 transition-colors ${playbackRate === rate ? "text-pink-500 font-bold" : "text-zinc-300"}`}
+                                        >
+                                            <span>{rate === 1 ? "Normal" : `${rate}x`}</span>
+                                            {playbackRate === rate && <span>✔</span>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowSpeedMenu(!showSpeedMenu);
+                                }}
+                                className="text-xs font-bold text-zinc-400 hover:text-pink-500 bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-all min-w-[3rem] flex items-center justify-center"
+                            >
+                                {playbackRate === 1 ? "1.0x" : `${playbackRate}x`}
+                            </button>
                         </div>
                     </div>
 

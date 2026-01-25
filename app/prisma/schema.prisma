@@ -34,6 +34,7 @@ model MediaItem {
   duration    Int?     // Seconds (Video/Audio)
   pages       Int?     // Page count (Manga)
   size        BigInt?  // File size in bytes
+  lastPos     Float    @default(0) // 💾 Resume Position (seconds)
   
   rating      Int      @default(0) // 0-5 stars
   viewCount   Int      @default(0) // How many times played

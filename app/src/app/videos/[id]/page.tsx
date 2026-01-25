@@ -50,9 +50,12 @@ export default async function VideoPlayerPage(props: Props) {
                     {/* 🎞️ Player Container (Wrapper for Aspect Ratio) */}
                     <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl shadow-black border border-zinc-800 relative z-10">
                         <VideoPlayer
+                            id={item.id}
                             src={src}
                             poster={item.thumbnail || undefined}
                             className="w-full h-full"
+                            initialLastPos={item.lastPos}
+                            serverDuration={item.duration || 0}
                         />
                     </div>
 
