@@ -66,3 +66,22 @@ model Marker {
   
   createdAt DateTime @default(now())
 }
+
+// ⚙️ User Settings (Single-User App)
+model UserSettings {
+  id        String   @id @default("default")
+  
+  // 🎨 Marker Icons (JSON array)
+  markerIcons String  @default("[\"💦\",\"👄\",\"🍑\",\"🐄\",\"🦶\",\"💕\",\"🚀\",\"🛑\"]")
+  
+  // 💾 Playback Settings
+  autoResume  Boolean @default(true)
+  
+  // 🎥 Quick Action Settings
+  quickActionMode String @default("highlight") // "highlight" or "explicit"
+  quickActionIcon String @default("✨")
+  quickActionLabel String @default("Highlight")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

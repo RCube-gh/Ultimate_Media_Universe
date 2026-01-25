@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, Settings as SettingsIcon, X, Trash2 } from "lucide-react";
+import { SettingsForm } from "./SettingsForm";
+import { useSettings } from "@/hooks/useSettings";
 
 interface VideoPlayerProps {
     id: string; // MediaItem ID for markers
@@ -19,9 +21,15 @@ type Marker = {
     icon: string;
 };
 
+// Global debounce set for view counting (React Strict Mode fix)
+const recentViewers = new Set<string>();
+
 export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, serverDuration = 0 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // ⚙️ User Settings
+    const { settings } = useSettings();
 
     // 📊 Player State
     const [isPlaying, setIsPlaying] = useState(false);
@@ -33,20 +41,25 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showControls, setShowControls] = useState(true);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
     // 🖱️ Interaction State (Fix for seeking conflict)
     const [isDragging, setIsDragging] = useState(false);
-
-    // ✨ Overlay Feedback State
-    const [feedbackIcon, setFeedbackIcon] = useState<React.ReactNode | null>(null);
-    const feedbackTimeoutRef = useRef<NodeJS.Timeout>(null);
     const controlsTimeoutRef = useRef<NodeJS.Timeout>(null);
 
     // 📍 Markers State
     const [markers, setMarkers] = useState<Marker[]>([]);
     const [isMarkerModalOpen, setIsMarkerModalOpen] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, markerId: string } | null>(null);
     const [markerLabel, setMarkerLabel] = useState("");
     const [markerIcon, setMarkerIcon] = useState("💦"); // Default
+
+    // 🌐 Close Context Menu on Click
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener("click", handleClick);
+        return () => window.removeEventListener("click", handleClick);
+    }, []);
 
     // 🔁 AB Loop State
     const [loopStart, setLoopStart] = useState<number | null>(null);
@@ -67,12 +80,121 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             .catch(err => console.error("Failed to load markers", err));
     }, [id]);
 
+    // 🗑️ Delete Marker
+    const deleteMarker = async (markerId: string) => {
+        // Optimistic Update
+        setMarkers(prev => prev.filter(m => m.id !== markerId));
+
+        try {
+            await fetch(`/api/markers/${markerId}`, { method: "DELETE" });
+
+            // Trigger Event for Stats Update
+            const event = new CustomEvent("fapflix-trigger-action", {
+                detail: { type: "delete", id: markerId }
+            });
+            window.dispatchEvent(event);
+
+        } catch (e) {
+            console.error("Failed to delete marker", e);
+            // Revert could be added here if needed, but low priority for now
+        }
+    };
+
+    // ✨ Overlay Feedback State
+    // ✨ Overlay Feedback State
+    const [feedbackState, setFeedbackState] = useState<{ content: React.ReactNode, mode?: "default" | "fullscreen", isExiting?: boolean } | null>(null);
+    const feedbackTimeoutRef = useRef<NodeJS.Timeout>(null);
+
+    const triggerFeedback = useCallback((content: React.ReactNode, options?: { duration?: number, mode?: "default" | "fullscreen" }) => {
+        // 1. Reset
+        setFeedbackState({ content, mode: options?.mode || "default", isExiting: false });
+        if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+
+        // 2. Schedule Exit (Fade Out)
+        const totalDuration = options?.duration || 800;
+        const exitDuration = 500;
+        const visibleDuration = Math.max(totalDuration - exitDuration, 0);
+
+        feedbackTimeoutRef.current = setTimeout(() => {
+            // Trigger Exit Animation
+            setFeedbackState(prev => prev ? { ...prev, isExiting: true } : null);
+
+            // 3. Final Unmount (Track this timeout too!)
+            feedbackTimeoutRef.current = setTimeout(() => {
+                setFeedbackState(null);
+            }, exitDuration);
+        }, visibleDuration);
+    }, []);
+
+    // ✨ Feedback Helper
+    const showMarkerFeedback = useCallback((icon: string, label: string, isExplicitAction: boolean = false) => {
+        // Normalize icon check
+        // Show Splash ONLY if icon matches AND it was triggered via Quick Action (Explicit)
+        if (icon && icon.includes("💦") && isExplicitAction) {
+            // 💦 SPLASH MODE
+            triggerFeedback(
+                <div className="relative flex items-center justify-center w-full h-full overflow-hidden">
+                    {/* Ripple 1 */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-[10px] h-[10px] bg-blue-500 rounded-full animate-in zoom-in-[0] duration-[3000ms] fade-out-0 fill-mode-forwards opacity-0"
+                            style={{ animationFillMode: 'forwards', animationName: 'enter-ripple' }}></div>
+                        {/* Fallback using pure style if tailwind fails */}
+                        <div
+                            className="absolute bg-blue-500/50 rounded-full"
+                            style={{
+                                width: '10px', height: '10px',
+                                animation: 'ripple 3s cubic-bezier(0, 0, 0.2, 1) forwards',
+                            }}
+                        />
+                        <style>{`
+                            @keyframes ripple {
+                                0% { transform: scale(1); opacity: 0.8; }
+                                100% { transform: scale(300); opacity: 0; }
+                            }
+                         `}</style>
+                    </div>
+
+                    {/* Ripple 2 (Delayed) */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div
+                            className="absolute bg-cyan-400/30 rounded-full"
+                            style={{
+                                width: '10px', height: '10px',
+                                animation: 'ripple 3s cubic-bezier(0, 0, 0.2, 1) 0.2s forwards',
+                            }}
+                        />
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center animate-in zoom-in-50 duration-500">
+                        <span className="text-8xl filter drop-shadow-[0_0_25px_rgba(59,130,246,1)] animate-bounce">{icon}</span>
+                        <span className="text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-blue-400 mt-4 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] animate-pulse">SPLASH!</span>
+                    </div>
+                </div>,
+                { duration: 3050, mode: "fullscreen" }
+            );
+        } else {
+            // ✨ STANDARD HIGHLIGHT MODE
+            triggerFeedback(
+                <div className="flex flex-col items-center animate-in slide-in-from-bottom-4 duration-1000">
+                    <span className="text-5xl drop-shadow-lg animate-[pulse_1s_ease-in-out_infinite]">{icon}</span>
+                    <span className="text-sm font-bold bg-white/10 border border-white/20 backdrop-blur-md px-3 py-1 rounded-full mt-2 shadow-lg tracking-wider">
+                        {label || "Saved"}
+                    </span>
+                </div>,
+                { duration: 2500 }
+            );
+        }
+    }, [triggerFeedback]);
+
     // 💾 Save Marker
     const saveMarker = async () => {
         if (!videoRef.current || !id) return;
 
         const time = videoRef.current.currentTime;
-        const newMarker = { time, label: markerLabel, icon: markerIcon };
+        // Use local variable to capture current state before async
+        const currentIcon = markerIcon;
+        const currentLabel = markerLabel;
+        const newMarker = { time, label: currentLabel, icon: currentIcon };
 
         try {
             const res = await fetch(`/api/media/${id}/markers`, {
@@ -88,19 +210,14 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                 setMarkerLabel("");
                 setIsPlaying(true); // Resume
                 videoRef.current.play();
-                triggerFeedback("play");
+
+                // 🔥 Trigger Consistent Feedback (Manual = Standard)
+                showMarkerFeedback(currentIcon, currentLabel, false);
             }
         } catch (e) {
             console.error("Failed to save marker", e);
         }
     };
-
-    // Helper: Trigger Feedback
-    const triggerFeedback = useCallback((content: React.ReactNode) => {
-        setFeedbackIcon(content);
-        if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
-        feedbackTimeoutRef.current = setTimeout(() => setFeedbackIcon(null), 600);
-    }, []);
 
     // 👻 Controls Visibility Helper
     const showControlsTemporarily = useCallback(() => {
@@ -457,6 +574,49 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         return () => clearInterval(interval);
     }, [isPlaying, saveProgress]);
 
+    // 📊 View Counter (Debounced for Strict Mode)
+    useEffect(() => {
+        if (recentViewers.has(id)) return;
+
+        recentViewers.add(id);
+        fetch(`/api/media/${id}/view`, { method: "POST" }).catch(console.error);
+
+        // Allow counting again after 2 seconds (e.g. if user refreshes manually)
+        setTimeout(() => recentViewers.delete(id), 2000);
+    }, [id]);
+
+    // ⚡ Quick Action Listener (from VideoActions)
+    useEffect(() => {
+        const handleAction = (e: Event) => {
+            const detail = (e as CustomEvent).detail; // { label, icon }
+            const video = videoRef.current;
+            if (!video || !id) return;
+
+            const time = video.currentTime;
+
+            // 1. Save Marker
+            fetch(`/api/media/${id}/markers`, {
+                method: "POST",
+                body: JSON.stringify({
+                    time,
+                    label: detail.label,
+                    icon: detail.icon
+                })
+            }).then(() => {
+                // 2. Refresh Markers
+                fetch(`/api/media/${id}/markers`)
+                    .then(r => r.json())
+                    .then(data => setMarkers(data));
+            });
+
+            // 3. Visual Feedback (Unified)
+            showMarkerFeedback(detail.icon, detail.label);
+        };
+
+        window.addEventListener("fapflix-trigger-action", handleAction);
+        return () => window.removeEventListener("fapflix-trigger-action", handleAction);
+    }, [id, triggerFeedback]);
+
     // ⏳ Event Listeners
     useEffect(() => {
         const video = videoRef.current;
@@ -561,7 +721,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
                         {/* Emoji Picker (Simple) */}
                         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                            {["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"].map(emoji => (
+                            {(settings ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
                                 <button
                                     key={emoji}
                                     onClick={() => setMarkerIcon(emoji)}
@@ -600,11 +760,26 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                 </div>
             )}
 
-            {feedbackIcon && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[100]">
-                    <div className="bg-black/70 text-white rounded-2xl p-6 animate-in fade-in zoom-in duration-200 backdrop-blur-sm shadow-2xl border border-white/10">
-                        {feedbackIcon}
-                    </div>
+            {feedbackState && (
+                <div
+                    className={`absolute inset-0 flex items-center justify-center z-[100] ${feedbackState.mode === "fullscreen" ? "pointer-events-none overflow-hidden" : "pointer-events-none"}`}
+                    style={{
+                        transition: 'opacity 500ms ease-out, transform 500ms ease-out',
+                        opacity: feedbackState.isExiting ? 0 : 1,
+                        transform: feedbackState.isExiting ? 'scale(0.95)' : 'scale(1)',
+                    }}
+                >
+                    {feedbackState.mode === "fullscreen" ? (
+                        // Fullscreen Mode (No Container)
+                        <div className="w-full h-full flex items-center justify-center animate-in fade-in duration-300">
+                            {feedbackState.content}
+                        </div>
+                    ) : (
+                        // Default Mode (Dark Box)
+                        <div className="bg-black/70 text-white rounded-2xl p-6 animate-in fade-in zoom-in duration-200 backdrop-blur-sm shadow-2xl border border-white/10">
+                            {feedbackState.content}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -698,14 +873,27 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                                         videoRef.current.play();
                                     }
                                 }}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setContextMenu({ x: e.clientX, y: e.clientY, markerId: m.id });
+                                }}
                             >
                                 {/* Visual Marker (Inner) */}
-                                <div className="w-1 h-full bg-yellow-400 rounded-full shadow-sm transition-all duration-200 group-hover/marker:w-1.5 group-hover/marker:h-[120%] group-hover/marker:bg-pink-400 group-hover/marker:shadow-pink-500/50"></div>
+                                <div className={`w-1 h-full rounded-full shadow-sm transition-all duration-200 group-hover/marker:w-1.5 group-hover/marker:h-[120%] 
+                                    ${m.icon === "💦"
+                                        ? "bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.6)] group-hover/marker:bg-cyan-100 group-hover/marker:shadow-[0_0_12px_rgba(34,211,238,1)]"
+                                        : "bg-yellow-400 group-hover/marker:bg-pink-400 group-hover/marker:shadow-pink-500/50"
+                                    }`}></div>
                                 {/* Tooltip (Unified Box Mode) */}
-                                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-0 group-hover/marker:opacity-100 transition-all duration-200 pointer-events-none z-[100] transform translate-y-2 group-hover/marker:translate-y-0 text-shadow-sm">
+                                <div className={`absolute bottom-0 pb-8 left-1/2 -translate-x-1/2 transition-all duration-200 z-[100] text-shadow-sm
+                                    ${contextMenu?.markerId === m.id
+                                        ? "opacity-100 translate-y-0 pointer-events-auto"
+                                        : "opacity-0 translate-y-2 group-hover/marker:opacity-100 group-hover/marker:translate-y-0 pointer-events-none group-hover/marker:pointer-events-auto"
+                                    }`}>
                                     <div className="bg-zinc-900/90 backdrop-blur-md border border-pink-500/30 p-3 rounded-xl shadow-2xl flex flex-col items-center gap-1 min-w-[100px]">
                                         {/* Big Emoji */}
-                                        <div className="text-4xl drop-shadow-md pb-1">
+                                        <div className="text-4xl drop-shadow-md pb-1 relative group/icon">
                                             {m.icon}
                                         </div>
 
@@ -721,6 +909,27 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                             </div>
                         ))}
                     </div>
+
+                    {/* 🖱️ Context Menu */}
+                    {contextMenu && (
+                        <div
+                            className="fixed z-[9999] bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[120px] animate-in fade-in zoom-in duration-100"
+                            style={{ top: contextMenu.y, left: contextMenu.x }}
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseLeave={() => setContextMenu(null)}
+                        >
+                            <button
+                                onClick={() => {
+                                    deleteMarker(contextMenu.markerId);
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/10 hover:text-red-300 flex items-center gap-2"
+                            >
+                                <Trash2 size={14} />
+                                <span>Delete</span>
+                            </button>
+                        </div>
+                    )}
                     {/* Progress */}
                     <div
                         className="absolute top-0 left-0 h-full bg-pink-600 rounded-full pointer-events-none"
@@ -793,6 +1002,9 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                             {formatTime(currentTime)} / {formatTime(duration)}
                         </div>
 
+                    </div>
+
+                    <div className="flex items-center gap-4">
                         {/* ⏩ Playback Speed Menu */}
                         <div className="relative">
                             {/* Backdrop for click outside */}
@@ -830,15 +1042,47 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                                 {playbackRate === 1 ? "1.0x" : `${playbackRate}x`}
                             </button>
                         </div>
-                    </div>
 
-                    <div className="flex items-center gap-4">
+                        {/* ⚙️ Settings Button */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsSettingsModalOpen(true);
+                                setIsPlaying(false); // Pause when settings open
+                                if (videoRef.current) videoRef.current.pause();
+                            }}
+                            className="hover:text-pink-500 transition-colors p-1"
+                        >
+                            <SettingsIcon size={20} />
+                        </button>
                         <button onClick={toggleFullscreen} className="hover:text-pink-500 transition-colors p-1">
                             {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
+            </div >
+
+            {/* ⚙️ Settings Modal */}
+            {
+                isSettingsModalOpen && (
+                    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in" onClick={(e) => { e.stopPropagation(); setIsSettingsModalOpen(false); }}>
+                        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto p-8 relative" onClick={(e) => e.stopPropagation()}>
+                            <button
+                                onClick={() => setIsSettingsModalOpen(false)}
+                                className="absolute top-4 right-4 p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+
+                            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                                <span className="text-pink-500">⚙️</span> Settings & Preferences
+                            </h2>
+
+                            <SettingsForm />
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

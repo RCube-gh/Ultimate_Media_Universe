@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Calendar, Clock, ThumbsUp, Heart, Share2, MoreHorizontal, List, Play } from "lucide-react";
+import { ChevronLeft, Calendar, Clock, Share2, List, Play } from "lucide-react";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { VideoActions } from "@/components/VideoActions";
+import { MarkerStats } from "@/components/MarkerStats";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Props = {
@@ -54,8 +56,10 @@ export default async function VideoPlayerPage(props: Props) {
                             src={src}
                             poster={item.thumbnail || undefined}
                             className="w-full h-full"
-                            initialLastPos={item.lastPos}
+                            initialLastPos={(item as any).lastPos}
                             serverDuration={item.duration || 0}
+                        // Force HMR update 2
+                        // Force HMR update 3 matches user timestamp 15:11
                         />
                     </div>
 
@@ -66,27 +70,18 @@ export default async function VideoPlayerPage(props: Props) {
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             {/* Stats */}
                             <div className="flex items-center gap-2 text-sm text-zinc-400">
-                                {/* <span>{item.viewCount} views</span> */}
-                                <span>0 views</span>
+                                <span className="text-white font-bold">{item.viewCount.toLocaleString()} views</span>
                                 <span>•</span>
                                 <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                                <MarkerStats id={id} />
                             </div>
 
                             {/* Actions Toolbar */}
-                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                                <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full font-medium text-sm transition-colors">
-                                    <ThumbsUp size={18} /> Like
-                                </button>
-                                <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full font-medium text-sm transition-colors">
-                                    <Heart size={18} className="text-pink-500" /> Favorite
-                                </button>
-                                <button className="flex items-center gap-2 px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-full font-bold text-sm transition-colors shadow-lg shadow-pink-900/20">
-                                    💧 Cum
-                                </button>
-                                <button className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors">
-                                    <MoreHorizontal size={18} />
-                                </button>
-                            </div>
+                            <VideoActions
+                                id={id}
+                                initialLikes={item.rating || 0}
+                                initialIsFavorite={item.isFavorite}
+                            />
                         </div>
 
                         {/* Description Box */}
