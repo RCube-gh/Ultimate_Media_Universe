@@ -162,7 +162,9 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
     // 📄 Parse Pages & Spreads (View Logic)
     // We pre-calculate "Views" (Single Page or Spread) based on mode
     const views = useMemo(() => {
-        if (viewMode === 'scroll' || spreadMode === 'single') {
+        // Only force single view if explicitly set to single
+        // (Scroll mode CAN support spreads if user wants)
+        if (spreadMode === 'single') {
             // Simple 1-to-1 mapping
             return pages.map((p, i) => ({ pages: [p], indices: [i] }));
         }
@@ -202,6 +204,25 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
         }
         return calculatedViews;
     }, [pages, spreadMode, viewMode]);
+
+    // 🚀 Speculative Prefetching (Performance Boost)
+    useEffect(() => {
+        const prefetch = (viewIdx: number) => {
+            if (viewIdx >= 0 && viewIdx < views.length) {
+                views[viewIdx].pages.forEach(p => {
+                    const img = new Image();
+                    img.src = p.url;
+                });
+            }
+        };
+
+        // Prioritize Forward Reading
+        prefetch(currentViewIndex + 1);
+        prefetch(currentViewIndex + 2); // Lookahead 2 steps for spread mode
+        // Keep previous ready too
+        prefetch(currentViewIndex - 1);
+
+    }, [currentViewIndex, views]);
 
     // ⚡ Listen for External Actions (from Page Level)
     useEffect(() => {
@@ -481,7 +502,7 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
                 onScroll={handleScroll}
             >
                 {/* 📖 PAGED MODE */}
-                {viewMode === 'paged' && (
+                {viewMode === 'paged' && views[currentViewIndex] && (
                     <div className="relative w-full h-full flex items-center justify-center px-2">
                         {/* Render Current Spread */}
                         {/* RTL: Just use flex-row-reverse if 2 pages */}

@@ -610,7 +610,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             });
 
             // 3. Visual Feedback (Unified)
-            showMarkerFeedback(detail.icon, detail.label);
+            showMarkerFeedback(detail.icon, detail.label, true);
         };
 
         window.addEventListener("fapflix-trigger-action", handleAction);

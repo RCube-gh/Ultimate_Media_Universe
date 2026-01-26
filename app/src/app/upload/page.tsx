@@ -110,24 +110,60 @@ export default function UploadPage() {
         const files = e.dataTransfer.files;
         if (files && files.length > 0) {
             const file = files[0];
-            setMainFile(file);
-            console.log("📂 Main File dropped:", file.name);
+            setMainFile(null);
+            console.log("📂 Checking File:", file.name);
 
-            // Auto-select type based on extension? (Optional, but improved UX)
-            if (file.type.startsWith("video")) setActiveType("VIDEO");
-            else if (file.type.startsWith("image")) setActiveType("IMAGE");
-            else if (file.type.startsWith("audio")) setActiveType("AUDIO");
-            else if (file.name.endsWith(".zip") || file.name.endsWith(".cbz")) setActiveType("MANGA");
+            // 🤖 Auto-Type Detection Logic
+            const isVideo = file.type.startsWith("video");
+            const isAudio = file.type.startsWith("audio");
+            const isImage = file.type.startsWith("image");
+            const isZip = file.name.endsWith(".zip") || file.name.endsWith(".cbz");
 
-            // If it's an image, also use it as thumbnail if none exists!
-            if (file.type.startsWith("image") && !thumbnailFile) {
-                setThumbnailPreview(URL.createObjectURL(file));
+            let isValid = false;
+            let errorMessage = "";
+
+            switch (activeType) {
+                case "VIDEO":
+                    if (isVideo) isValid = true;
+                    else errorMessage = "⚠️ Video mode: Only video files allowed.";
+                    break;
+                case "AUDIO":
+                    if (isZip) isValid = true;
+                    else errorMessage = "⚠️ Audio mode: Only ZIP files (Album) allowed.";
+                    break;
+                case "MANGA":
+                    if (isZip) isValid = true;
+                    else errorMessage = "⚠️ Manga mode: Only ZIP/CBZ archives allowed.";
+                    break;
+                case "IMAGE":
+                    if (isImage) isValid = true;
+                    else errorMessage = "⚠️ Image mode: Only image files allowed.";
+                    break;
+                case "LINK":
+                    if (isImage) {
+                        console.log("Setting Thumbnail for Link");
+                        setThumbnailPreview(URL.createObjectURL(file));
+                        setThumbnailFile(file);
+                        return;
+                    } else {
+                        errorMessage = "⚠️ Link mode: Only images allowed (for thumbnail).";
+                    }
+                    break;
             }
 
-            // Auto-fill title
-            const name = file.name.replace(/\.[^/.]+$/, "");
-            const titleInput = document.querySelector('input[name="title"]') as HTMLInputElement;
-            if (titleInput && !titleInput.value) titleInput.value = name;
+            if (!isValid) {
+                alert(errorMessage);
+                return;
+            }
+
+            setMainFile(file);
+
+            // Auto-fill title if file is Main
+            if (!isImage || activeType !== "LINK") {
+                const name = file.name.replace(/\.[^/.]+$/, "");
+                const titleInput = document.querySelector('input[name="title"]') as HTMLInputElement;
+                if (titleInput && !titleInput.value) titleInput.value = name;
+            }
         }
     };
 
