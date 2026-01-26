@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link as LinkIcon, Video, Book, Music, UploadCloud, Save, Image as ImageIcon, X, File, Film, FileAudio } from "lucide-react";
 import axios from "axios";
+import JSZip from "jszip";
 
 export default function UploadPage() {
     const [activeType, setActiveType] = useState("LINK");
@@ -20,8 +21,57 @@ export default function UploadPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
     const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
+    // 🎵 Audio Track Management
+    const [detectedTracks, setDetectedTracks] = useState<string[]>([]);
+    const [trackTitles, setTrackTitles] = useState<Record<string, string>>({}); // Filename -> Title
+
     const pasteAreaRef = useRef<HTMLDivElement>(null);
     const dropZoneRef = useRef<HTMLDivElement>(null);
+
+    // 🕵️‍♀️ Analyze ZIP for Audio Tracks
+    useEffect(() => {
+        if (activeType === "AUDIO" && mainFile && mainFile.name.toLowerCase().endsWith(".zip")) {
+            console.log("🕵️‍♀️ Analyzing ZIP for tracks...");
+            const processZip = async () => {
+                try {
+                    const zip = new JSZip();
+                    const contents = await zip.loadAsync(mainFile);
+
+                    const tracks: string[] = [];
+                    // Filter audio files
+                    contents.forEach((relativePath, zipEntry) => {
+                        if (!zipEntry.dir && /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(relativePath)) {
+                            // Only include top-level or clean paths? 
+                            // Let's include all recursive paths for now, displayed as relative.
+                            tracks.push(relativePath);
+                        }
+                    });
+
+                    // Sort naturally
+                    tracks.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+                    setDetectedTracks(tracks);
+
+                    // Initialize Titles (Clean filename as default)
+                    const initialTitles: Record<string, string> = {};
+                    tracks.forEach(t => {
+                        const filename = t.split(/[/\\]/).pop() || t;
+                        let clean = filename.replace(/\.[^/.]+$/, ""); // remove ext
+                        clean = clean.replace(/^\d+[\.\-\s]+/, ""); // remove leading "01."
+                        initialTitles[t] = clean.trim();
+                    });
+                    setTrackTitles(prev => Object.keys(prev).length === 0 ? initialTitles : prev); // Keep existing unless empty
+
+                } catch (e) {
+                    console.error("Failed to read ZIP:", e);
+                }
+            };
+            processZip();
+        } else {
+            setDetectedTracks([]);
+            setTrackTitles({});
+        }
+    }, [mainFile, activeType]);
 
     // 📋 Paste Handler (Thumbnail)
     useEffect(() => {
@@ -102,6 +152,11 @@ export default function UploadPage() {
         // Thumbnail
         if (thumbnailFile) {
             formData.append("thumbnailFile", thumbnailFile);
+        }
+
+        // Track Titles (Audio ZIP)
+        if (Object.keys(trackTitles).length > 0) {
+            formData.append("trackTitles", JSON.stringify(trackTitles));
         }
 
         try {
@@ -216,7 +271,7 @@ export default function UploadPage() {
                         ? 'bg-pink-500/10 border-pink-500'
                         : 'border-zinc-800 bg-black/20 hover:bg-zinc-900/50 hover:border-pink-500/30'
                         }`}
-                    onClick={() => !mainFile && (activeType === "MANGA" ? document.getElementById('zip-select')?.click() : document.getElementById('url-input')?.focus())}
+                    onClick={() => !mainFile && ((activeType === "MANGA" || activeType === "AUDIO") ? document.getElementById('zip-select')?.click() : document.getElementById('url-input')?.focus())}
                 >
                     {/* Background Glow */}
                     {!mainFile && (
@@ -252,13 +307,13 @@ export default function UploadPage() {
                                     <UploadCloud className="w-8 h-8 text-zinc-500 group-hover:text-pink-500 transition-colors" />
                                 </div>
 
-                                {activeType === "MANGA" ? (
+                                {activeType === "MANGA" || activeType === "AUDIO" ? (
                                     <>
                                         <div className="text-2xl text-white font-mono font-bold">
                                             Click to Select ZIP
                                         </div>
                                         <p className="text-zinc-500 text-sm">
-                                            Upload a ZIP/CBZ archive containing images
+                                            Upload a ZIP archive containing {activeType === "MANGA" ? "images" : "audio files"}
                                         </p>
                                     </>
                                 ) : (
@@ -310,7 +365,7 @@ export default function UploadPage() {
                         }}
                     />
 
-                    {!mainFile && activeType !== "MANGA" && (
+                    {!mainFile && activeType !== "MANGA" && activeType !== "AUDIO" && (
                         <button
                             type="button"
                             className="absolute bottom-4 text-xs text-zinc-700 hover:text-zinc-500 underline"
@@ -359,14 +414,14 @@ export default function UploadPage() {
                         </div>
                     )}
 
-                    {/* Manga specific Info Box */}
-                    {activeType === "MANGA" && (
+                    {/* Batch Upload Info Box (Manga/Audio) */}
+                    {(activeType === "MANGA" || activeType === "AUDIO") && (
                         <div className="p-6 bg-pink-500/5 rounded-xl border border-pink-500/20">
                             <h3 className="text-pink-400 font-bold mb-2 flex items-center gap-2">
-                                <Book size={18} /> Manga Upload Mode (ZIP)
+                                <Book size={18} /> {activeType} Upload Mode (ZIP)
                             </h3>
                             <p className="text-xs text-zinc-400">
-                                1st page will be used as thumbnail automatically.
+                                Folder structure will be preserved.
                                 Please upload a single ZIP or CBZ file.
                             </p>
                         </div>
@@ -380,7 +435,7 @@ export default function UploadPage() {
                         </div>
 
                         {/* URL Field (Shown for Manga mainly) */}
-                        <div className={activeType === "MANGA" ? "block" : "hidden"}>
+                        <div className={(activeType === "MANGA" || activeType === "AUDIO") ? "block" : "hidden"}>
                             <label className="text-xs font-bold text-zinc-500 ml-1">SOURCE URL</label>
                             <input name="source_url" type="url" placeholder="https://..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-300 focus:outline-none focus:border-pink-500 transition-colors font-mono" />
                         </div>
@@ -390,6 +445,32 @@ export default function UploadPage() {
                             <textarea name="description" placeholder="Write your thoughts..." className="w-full h-full min-h-[120px] bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-300 focus:outline-none focus:border-pink-500 transition-colors resize-none font-mono text-sm leading-relaxed" />
                         </div>
                     </div>
+
+                    {/* 🎵 Audio Track Editor (ZIP Content) */}
+                    {detectedTracks.length > 0 && (
+                        <div className="flex flex-col gap-2 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800 max-h-[300px] overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-2 fade-in">
+                            <h3 className="text-pink-400 font-bold flex items-center gap-2 sticky top-0 bg-zinc-950/90 p-2 z-10 backdrop-blur-sm border-b border-white/5">
+                                <Music size={16} /> Track List ({detectedTracks.length})
+                            </h3>
+                            <div className="space-y-3 mt-2">
+                                {detectedTracks.map((track, idx) => (
+                                    <div key={track} className="flex flex-col gap-1 text-sm group">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-zinc-500 font-mono text-xs w-6 shrink-0 text-right">{idx + 1}.</span>
+                                            <input
+                                                type="text"
+                                                value={trackTitles[track] || ""}
+                                                onChange={(e) => setTrackTitles(prev => ({ ...prev, [track]: e.target.value }))}
+                                                className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-zinc-200 focus:border-pink-500 focus:outline-none transition-colors text-sm"
+                                                placeholder="Track Title"
+                                            />
+                                        </div>
+                                        <span className="text-[10px] text-zinc-600 pl-10 truncate font-mono select-all" title={track}>{track}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* 📊 Progress Bar Area */}
                     {isSubmitting && (
@@ -414,7 +495,7 @@ export default function UploadPage() {
                     </div>
 
                 </form>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

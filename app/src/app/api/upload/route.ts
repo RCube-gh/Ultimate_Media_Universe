@@ -5,7 +5,7 @@ import { join } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import AdmZip from "adm-zip";
-import { scanMangaFolder } from "@/lib/scanner"; // 1. Static Import
+import { scanMangaFolder, scanAudioFolder } from "@/lib/scanner"; // 1. Static Import
 
 const execAsync = promisify(exec);
 
@@ -71,26 +71,32 @@ export async function POST(req: NextRequest) {
         }
 
         // 2️⃣ Process Main Content
-        if (type === "MANGA") {
+        // 2️⃣ Process Main Content
+        const isZip = mainFile && mainFile.name.toLowerCase().endsWith(".zip");
+        const isZipTarget = (type === "MANGA" || type === "AUDIO");
+
+        if (isZipTarget && isZip) {
             const uploadedFile = mainFile;
             if (uploadedFile && uploadedFile.size > 0) {
-                console.log(`📚 Processing MANGA ZIP Upload: ${uploadedFile.name}`);
+                const label = type === "MANGA" ? "MANGA" : "AUDIO";
+                const targetDirName = type === "MANGA" ? "manga" : "audio";
+                console.log(`📚 Processing ${label} ZIP Upload: ${uploadedFile.name}`);
 
                 const safeTitle = title.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-                let mangaDir = join(libraryDir, "manga", safeTitle);
+                let itemDir = join(libraryDir, targetDirName, safeTitle);
                 let finalTitle = title;
 
                 // 🛡️ Safety Check: If folder exists, append timestamp to make it unique
                 try {
-                    await mkdir(mangaDir); // Try creating. If fails (exists), it throws EEXIST
+                    await mkdir(itemDir, { recursive: true }); // Try creating (recursive for parents)
                 } catch (e: any) {
                     if (e.code === 'EEXIST') {
-                        console.log("⚠️ Folder exists, preventing overwrite by creating unique path.");
+                        console.log("⚠️ Folder exists, creating unique path.");
                         const timestamp = Date.now();
-                        finalTitle = `${title} (${timestamp})`;
+                        finalTitle = `${title} (${timestamp})`; // Update title for DB
                         const safeUnique = `${safeTitle}_${timestamp}`;
-                        mangaDir = join(libraryDir, "manga", safeUnique);
-                        await mkdir(mangaDir, { recursive: true });
+                        itemDir = join(libraryDir, targetDirName, safeUnique);
+                        await mkdir(itemDir, { recursive: true });
                     } else {
                         throw e; // Real error
                     }
@@ -99,16 +105,15 @@ export async function POST(req: NextRequest) {
                 const bytes = await uploadedFile.arrayBuffer();
                 const buffer = Buffer.from(bytes);
 
-                // Save ZIP for backup? or just discard? Let's save just in case for now.
-                // Or maybe we DON'T check file lock if we use buffer directly for unzip.
+                // Save ZIP temp
                 const tempZipPath = join(uploadDir, `${Date.now()}_temp_${safeTitle}.zip`);
                 await writeFile(tempZipPath, buffer);
 
                 console.log("🔓 Extracting ZIP (from Buffer)...");
                 try {
-                    // 2. Use Buffer directly to avoid File Lock issues!
+                    // Use Buffer directly to avoid File Lock issues!
                     const zip = new AdmZip(buffer);
-                    zip.extractAllTo(mangaDir, true);
+                    zip.extractAllTo(itemDir, true);
                     console.log("✅ Extraction complete!");
                 } catch (err: any) {
                     console.error("❌ ZIP Extraction Failed:", err);
@@ -120,11 +125,26 @@ export async function POST(req: NextRequest) {
 
                 // Scan
                 const sourceUrl = formData.get("source_url") as string;
-
                 try {
                     console.log("🕵️‍♀️ Starting Scanner...");
-                    // Directly call imported function
-                    const itemId = await scanMangaFolder(mangaDir, finalTitle);
+                    let itemId = "";
+
+                    // Parse Custom Track Titles
+                    const trackTitlesJson = formData.get("trackTitles") as string;
+                    let trackTitles: Record<string, string> = {};
+                    if (trackTitlesJson) {
+                        try {
+                            trackTitles = JSON.parse(trackTitlesJson);
+                        } catch (e) {
+                            console.warn("Failed to parse track custom titles JSON", e);
+                        }
+                    }
+
+                    if (type === "MANGA") {
+                        itemId = await scanMangaFolder(itemDir, finalTitle);
+                    } else {
+                        itemId = await scanAudioFolder(itemDir, finalTitle, trackTitles);
+                    }
 
                     if (sourceUrl) {
                         await prisma.mediaItem.update({
@@ -133,8 +153,8 @@ export async function POST(req: NextRequest) {
                         });
                     }
 
-                    console.log("✅ Manga Registered via Scanner:", itemId);
-                    return NextResponse.json({ success: true, message: "Manga Uploaded & Scanned! 📚", itemId });
+                    console.log(`✅ ${label} Registered via Scanner:`, itemId);
+                    return NextResponse.json({ success: true, message: `${label} Uploaded & Scanned! 🎵`, itemId });
 
                 } catch (scanErr: any) {
                     console.error("❌ Scan Failed:", scanErr);
@@ -145,12 +165,15 @@ export async function POST(req: NextRequest) {
                 }
 
             } else {
-                return NextResponse.json({ success: false, message: "No ZIP file provided for Manga." }, { status: 400 });
+                return NextResponse.json({ success: false, message: "No ZIP file provided." }, { status: 400 });
             }
 
         } else if (mainFile && mainFile.size > 0 && mainFile.name !== "undefined") {
-            // Video / Audio / Image
-            console.log("🚚 Processing Main File Upload...");
+            // Processing Single File (Video, Image, or Single Audio)
+            // If try to upload ZIP for Video/Link, it falls here (treated as file)
+            // If Single Audio (not zip), it falls here.
+
+            console.log("🚚 Processing Main File Upload (Single File Mode)...");
             const bytes = await mainFile.arrayBuffer();
             const buffer = Buffer.from(bytes);
             const safeName = mainFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");

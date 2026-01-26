@@ -42,16 +42,18 @@ export async function addMediaItem(prevState: AddItemState, formData: FormData):
         const url = formData.get("url") as string;
         // Sanitization for Title to be folder-safe if needed, but we use safeTitle later
         const title = formData.get("title") as string;
-        const type = formData.get("type") as string;
         const description = formData.get("description") as string;
 
         // 📁 Files
         const thumbnailFile = formData.get("thumbnailFile") as File | null;
         const mainFile = formData.get("mainFile") as File | null;
 
-        if (!title || !type) {
+        // Sanitize Type
+        const rawType = formData.get("type") as string;
+        if (!title || !rawType) {
             return { success: false, message: "Title and Type are required!" };
         }
+        const type = rawType.trim().toUpperCase();
 
         // 📂 Ensure directories exist outside of app for Docker compatibility
         // Path: /library (Parent of app)
@@ -84,20 +86,33 @@ export async function addMediaItem(prevState: AddItemState, formData: FormData):
 
         // 2️⃣ Process Main Content
         // Logic branches based on TYPE
-        if (type === "MANGA") {
-            // Expecting a Single ZIP File now
+        const isZip = mainFile && mainFile.name.toLowerCase().endsWith(".zip");
+
+        console.log("🔍 Debug Upload Logic:", {
+            type,
+            fileName: mainFile?.name,
+            isZip,
+            paramMatch: type === "MANGA" || type === "AUDIO"
+        });
+
+        if ((type === "MANGA" || type === "AUDIO") && isZip) {
+            // Expecting a Single ZIP File: Extract and Scan
             const uploadedFile = mainFile;
 
             if (uploadedFile && uploadedFile.size > 0) {
-                console.log(`📚 Processing MANGA ZIP Upload: ${uploadedFile.name}`);
+                const isManga = type === "MANGA";
+                const label = isManga ? "MANGA" : "AUDIO";
+                const targetDirName = isManga ? "manga" : "audio";
 
-                // 📁 Create localized folder: ../library/manga/[Title]
+                console.log(`📚 Processing ${label} ZIP Upload: ${uploadedFile.name}`);
+
+                // 📁 Create localized folder: ../library/[type]/[Title]
                 const safeTitle = title.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-                const mangaDir = join(libraryDir, "manga", safeTitle);
+                const itemDir = join(libraryDir, targetDirName, safeTitle);
 
                 // Clear directory if exists to avoid mixing or ensure clean state? 
                 // Just recursive create for now.
-                await mkdir(mangaDir, { recursive: true });
+                await mkdir(itemDir, { recursive: true });
 
                 // 📦 Save ZIP temporarily
                 const bytes = await uploadedFile.arrayBuffer();
@@ -109,21 +124,26 @@ export async function addMediaItem(prevState: AddItemState, formData: FormData):
                 console.log("🔓 Extracting ZIP...");
                 try {
                     const zip = new AdmZip(tempZipPath);
-                    zip.extractAllTo(mangaDir, true); // overwrite = true
+                    zip.extractAllTo(itemDir, true); // overwrite = true
                     console.log("✅ Extraction complete!");
 
-                    // Cleanup ZIP
-                    // await fs.unlink(tempZipPath); // Not imported fs/promises as fs. Add to imports if needed or ignore cleanup for debug
+                    // Cleanup ZIP (Future: unlink)
                 } catch (err) {
                     console.error("❌ ZIP Extraction Failed:", err);
                     return { success: false, message: "Failed to extract ZIP file!" };
                 }
 
-                // 🕵️‍♀️ Scan & Register (This handles DB creation and thumbnail generation)
+                // 🕵️‍♀️ Scan & Register 
                 const sourceUrl = formData.get("source_url") as string;
-                /* Note: Dynamic import to avoid circular dependencies if any, or just cleaner modularity */
-                const { scanMangaFolder } = await import("@/lib/scanner");
-                const itemId = await scanMangaFolder(mangaDir, title);
+                /* Note: Dynamic import to avoid circular dependencies if any */
+                const { scanMangaFolder, scanAudioFolder } = await import("@/lib/scanner");
+
+                let itemId = "";
+                if (isManga) {
+                    itemId = await scanMangaFolder(itemDir, title);
+                } else {
+                    itemId = await scanAudioFolder(itemDir, title);
+                }
 
                 // Update URL if exists (Patch)
                 if (sourceUrl) {
@@ -133,11 +153,11 @@ export async function addMediaItem(prevState: AddItemState, formData: FormData):
                     });
                 }
 
-                console.log("✅ Manga Registered via Scanner:", itemId);
+                console.log(`✅ ${label} Registered via Scanner:`, itemId);
                 revalidatePath("/");
-                return { success: true, message: "Manga Uploaded & Scanned! 📚" };
+                return { success: true, message: `${label} Uploaded & Scanned! 🎵` };
             } else {
-                return { success: false, message: "No Manga ZIP file found!" };
+                return { success: false, message: `No ${type} ZIP file found!` };
             }
 
         } else if (mainFile && mainFile.size > 0 && mainFile.name !== "undefined") {

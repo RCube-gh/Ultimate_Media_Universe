@@ -36,23 +36,70 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
 
     const ext = path.extname(fullPath).toLowerCase();
 
-    // 🎥 Standard File Request (Not a thumbnail request)
+    // 🎥 Standard File Request (Stream & Range Support)
     if (!isThumb) {
-        // Stream original file
-        const fileBuffer = await fsPromises.readFile(fullPath);
+        const stat = fs.statSync(fullPath);
+        const fileSize = stat.size;
+        const range = req.headers.get("range");
 
-        let contentType = "application/octet-stream";
-        if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
-        else if (ext === ".png") contentType = "image/png";
-        else if (ext === ".webp") contentType = "image/webp";
-        else if (ext === ".mp4") contentType = "video/mp4";
+        // Comprehensive MIME Map
+        const MIME_TYPES: Record<string, string> = {
+            ".mp4": "video/mp4",
+            ".webm": "video/webm",
+            ".ogg": "video/ogg",
+            ".avi": "video/x-msvideo",
+            ".mov": "video/quicktime",
+            ".mkv": "video/x-matroska",
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".flac": "audio/flac",
+            ".m4a": "audio/mp4",
+            ".aac": "audio/aac",
+            ".wma": "audio/x-ms-wma",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml",
+            ".avif": "image/avif"
+        };
 
-        return new NextResponse(fileBuffer, {
-            headers: {
-                "Content-Type": contentType,
-                "Cache-Control": "public, max-age=31536000, immutable",
-            },
-        });
+        const contentType = MIME_TYPES[ext] || "application/octet-stream";
+
+        // Debug logging
+        // console.log(`📡 Serving: ${relativePath} | Ext: ${ext} | Type: ${contentType}`);
+
+        // 📏 Range Request Handling
+        if (range) {
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunksize = (end - start) + 1;
+            const fileStream = fs.createReadStream(fullPath, { start, end });
+
+            return new NextResponse(fileStream as any, {
+                status: 206,
+                headers: {
+                    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": chunksize.toString(),
+                    "Content-Type": contentType,
+                    "Cache-Control": "public, max-age=31536000, immutable", // Optional: long cache
+                },
+            });
+        } else {
+            // Full Stream
+            const fileStream = fs.createReadStream(fullPath);
+            return new NextResponse(fileStream as any, {
+                status: 200,
+                headers: {
+                    "Content-Length": fileSize.toString(),
+                    "Content-Type": contentType,
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                },
+            });
+        }
     }
 
     // 🖼️ Thumbnail Request Logic
@@ -98,7 +145,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
         // Save to cache
         await fsPromises.writeFile(cachePath, processedBuffer);
 
-        return new NextResponse(processedBuffer, {
+        return new NextResponse(processedBuffer as any, {
             headers: {
                 "Content-Type": "image/webp",
                 "Cache-Control": "public, max-age=31536000, immutable",

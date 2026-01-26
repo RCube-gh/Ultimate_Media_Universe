@@ -212,3 +212,192 @@ async function getImagesRecursively(dir: string, baseDir = ''): Promise<string[]
     }
     return results;
 }
+
+/**
+ * 🎧 Scan a folder for AUDIO content (ASMR, Voice Works)
+ */
+export async function scanAudioFolder(absolutePath: string, title?: string, customTrackTitles?: Record<string, string>): Promise<string> {
+    try {
+        console.log(`🎧 Moca is scanning AUDIO: ${absolutePath}`);
+
+        // 1. Get all files
+        console.log("📂 Searching for files...");
+        const validExtensions = /\.(mp3|wav|ogg|m4a|flac|aac|wma|jpg|jpeg|png|webp|avif|gif)$/i;
+        const allFiles = await getFilesRecursively(absolutePath, validExtensions);
+
+        if (allFiles.length === 0) {
+            throw new Error("No media files found in this folder!");
+        }
+
+        // 2. Separate Audio and Images
+        const tracks: { file: string, size: number, index: number, title: string }[] = [];
+        const images: PageMeta[] = [];
+        let totalSize = 0;
+
+        // Helper check
+        const isAudio = (f: string) => /\.(mp3|wav|ogg|m4a|flac|aac|wma)$/i.test(f);
+        const isImage = (f: string) => /\.(jpg|jpeg|png|webp|avif|gif)$/i.test(f);
+
+        // Sort globally first
+        allFiles.sort((a, b) => naturalSort(a, b));
+
+        let trackIndex = 0;
+        let imageIndex = 0;
+
+        for (const file of allFiles) {
+            const fullPath = path.join(absolutePath, file);
+            const stats = await fs.stat(fullPath);
+            totalSize += stats.size;
+
+            if (isAudio(file)) {
+                let trackTitle = path.basename(file, path.extname(file)); // Default to filename
+                try {
+                    const { parseFile } = await import('music-metadata');
+                    const metadata = await parseFile(fullPath);
+                    if (metadata.common.title) {
+                        trackTitle = metadata.common.title;
+                    }
+                } catch (e) {
+                    console.warn(`⚠️ Failed to parse metadata for ${file}`, e);
+                }
+
+                // 🌟 Apply Custom Title Override
+                const normalizedKey = file.replaceAll('\\', '/');
+                if (customTrackTitles && customTrackTitles[normalizedKey]) {
+                    trackTitle = customTrackTitles[normalizedKey];
+                    // console.log(`✏️ Applied custom title for ${file}: ${trackTitle}`);
+                }
+
+                tracks.push({
+                    file, // Relative path
+                    title: trackTitle,
+                    size: stats.size,
+                    index: trackIndex++
+                });
+            } else if (isImage(file)) {
+                // Get Image Metadata
+                let width = 0;
+                let height = 0;
+                try {
+                    const metadata = await sharp(fullPath).metadata();
+                    width = metadata.width || 0;
+                    height = metadata.height || 0;
+                } catch (e) {
+                    console.warn(`⚠️ Failed to read metadata for ${file}, assuming 0x0`);
+                }
+
+                images.push({
+                    file,
+                    w: width,
+                    h: height,
+                    size: stats.size,
+                    index: imageIndex++
+                });
+            }
+        }
+
+        console.log(`✅ Found ${tracks.length} tracks and ${images.length} images.`);
+
+        if (tracks.length === 0) {
+            console.warn("⚠️ No audio tracks found, but registering as AUDIO anyway (might be images only?)");
+        }
+
+        // 3. Register to DB
+        const folderName = path.basename(absolutePath);
+        const finalTitle = title || folderName;
+
+        // 🖼️ Construct Thumbnail Path
+        // Priority: "cover", "front", "folder" -> then first image
+        let thumbnailPath: string | null = null;
+        if (images.length > 0) {
+            let coverImage = images.find(img => {
+                const lower = path.basename(img.file).toLowerCase();
+                return lower.includes("cover") || lower.includes("front") || lower.includes("folder") || lower.includes("main");
+            });
+
+            if (!coverImage) {
+                coverImage = images[0]; // Fallback to first image
+            }
+
+            try {
+                const normalizedAbsPath = absolutePath.replaceAll('\\', '/');
+                const libIndex = normalizedAbsPath.toLowerCase().lastIndexOf('/library/');
+
+                if (libIndex !== -1) {
+                    const relativeRoot = normalizedAbsPath.substring(libIndex + 9);
+                    const thumbFile = coverImage.file.replaceAll('\\', '/');
+                    thumbnailPath = `/api/file/${relativeRoot}/${thumbFile}`;
+                }
+            } catch (err) {
+                console.error("⚠️ Error generating thumbnail path:", err);
+            }
+        }
+
+        // Store both in metadata
+        const metadata = {
+            tracks,
+            images
+        };
+
+        console.log("💾 Upserting to Database...");
+        const item = await prisma.mediaItem.upsert({
+            where: { filePath: absolutePath },
+            update: {
+                type: "AUDIO",
+                pages: images.length,
+                size: BigInt(totalSize),
+                metadata: JSON.stringify(metadata),
+                isArchived: true,
+                thumbnail: thumbnailPath,
+            },
+            create: {
+                title: finalTitle,
+                type: "AUDIO",
+                filePath: absolutePath,
+                isArchived: true,
+                pages: images.length,
+                size: BigInt(totalSize),
+                metadata: JSON.stringify(metadata),
+                thumbnail: thumbnailPath,
+            }
+        });
+
+        console.log(`✨ Registered AUDIO to DB: ${item.title} (${tracks.length} tracks, ${images.length} images)`);
+
+        // 4. Trigger Thumbnail Generation (Only for images)
+        if (images.length > 0) {
+            generateThumbnailCache(item.id, absolutePath, images).catch(err => {
+                console.error(`❌ Thumbnail generation failed for ${item.title}:`, err);
+            });
+        }
+
+        return item.id;
+
+    } catch (error) {
+        console.error("💥 Scanning failed in scanAudioFolder:", error);
+        throw error;
+    }
+}
+
+async function getFilesRecursively(dir: string, pattern: RegExp, baseDir = ''): Promise<string[]> {
+    let results: string[] = [];
+    try {
+        const list = await fs.readdir(dir, { withFileTypes: true });
+        for (const dirent of list) {
+            const relativePath = path.join(baseDir, dirent.name);
+            const fullPath = path.join(dir, dirent.name);
+
+            if (dirent.isDirectory()) {
+                const subResults = await getFilesRecursively(fullPath, pattern, relativePath);
+                results = results.concat(subResults);
+            } else {
+                if (pattern.test(dirent.name)) {
+                    results.push(relativePath);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error reading directory:", dir, e);
+    }
+    return results;
+}
