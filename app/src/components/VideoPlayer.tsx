@@ -65,6 +65,72 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     const [loopStart, setLoopStart] = useState<number | null>(null);
     const [loopEnd, setLoopEnd] = useState<number | null>(null);
 
+    // 🎞️ Sprite Sheet State
+    const [hasSprite, setHasSprite] = useState(false);
+
+    useEffect(() => {
+        // Quick HEAD check to see if sprite exists
+        // Must include thumb=true to bypass video streaming logic in API!
+        const spriteUrl = `${src}${src.includes('?') ? '&' : '?'}sprite=true&thumb=true`;
+        console.log("👻 Checking Sprite URL:", spriteUrl);
+        fetch(spriteUrl, { method: 'HEAD' })
+            .then(res => {
+                console.log("👻 Sprite Check Result:", res.status, res.ok);
+                if (res.ok) setHasSprite(true);
+            })
+            .catch(err => console.error("👻 Sprite Check Error:", err));
+    }, [src]);
+
+    // 🎞️ Sprite Background Calculator
+    const getSpriteStyle = (time: number | null) => {
+        if (time === null) return {};
+        // Config must match server-side generation:
+        // Interval: 10s, Width: 160, Height: 90, Columns: 10
+        const interval = 10;
+        const width = 160;
+        const height = 90;
+        const columns = 10;
+
+        const index = Math.floor(time / interval);
+        const col = index % columns;
+        const row = Math.floor(index / columns);
+
+        const bgX = -col * width;
+        const bgY = -row * height;
+
+        // Custom Debug Log (Throttle this in real apps, but ok for now)
+        // console.log(`👻 Sprite Calc: Time=${time.toFixed(1)}, Index=${index}, Pos=${bgX},${bgY}`);
+
+        return {
+            backgroundImage: `url('${src}${src.includes('?') ? '&' : '?'}sprite=true&thumb=true')`,
+            backgroundPosition: `${bgX}px ${bgY}px`,
+            backgroundSize: `1600px auto`, // Force correct scaling (160px * 10 cols)
+            width: `${width}px`,
+            height: `${height}px`,
+            backgroundRepeat: 'no-repeat',
+            // backgroundColor: 'red', // DEBUG REMOVED
+        };
+    };
+
+    // 🎞️ Seekbar Preview State
+    const [previewTime, setPreviewTime] = useState<number | null>(null);
+    const [previewX, setPreviewX] = useState<number>(0);
+
+    // 🎞️ Seekbar handlers
+    const handleSeekMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = Math.max(0, Math.min(1, x / rect.width));
+        const time = percent * duration;
+
+        setPreviewX(x);
+        setPreviewTime(time);
+    }, [duration]);
+
+    const handleSeekLeave = useCallback(() => {
+        setPreviewTime(null);
+    }, []);
+
     // 💾 Resume State
     const [showResumeToast, setShowResumeToast] = useState(false);
     const lastSaveTimeRef = useRef(0);
@@ -828,7 +894,87 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* 📏 SEEK BAR */}
-                <div className="relative w-full h-2 group/seek cursor-pointer mb-4 flex items-center">
+                <div
+                    className="relative w-full h-2 group/seek cursor-pointer mb-4 flex items-center"
+                    onMouseMove={handleSeekMove}
+                    onMouseLeave={handleSeekLeave}
+                >
+                    {/* 🎞️ Hover Preview */}
+                    {previewTime !== null && (
+                        <div
+                            className="absolute bottom-4 -translate-x-1/2 z-[80] pointer-events-none flex flex-col items-center animate-in fade-in zoom-in duration-150"
+                            style={{ left: previewX }}
+                        >
+                            <div
+                                className="relative origin-bottom mb-2"
+                                style={{
+                                    transform: `translateX(${(() => {
+                                        // Dynamic Scale & Clamp Logic
+                                        const scale = isFullscreen ? 1.6 : 1.1; // 1.1 for normal, 1.6 for fullscreen
+
+                                        if (!containerRef.current) return 0;
+
+                                        // Calculate Half Width based on dynamic scale
+                                        const baseWidth = 180;
+                                        const scaledWidth = baseWidth * scale;
+                                        const halfWidth = scaledWidth / 2;
+
+                                        const seekbarWidth = containerRef.current.clientWidth - 32; // Approx padding
+
+                                        const globalX = previewX; // Parent's left (mouse pos)
+
+                                        let offset = 0;
+                                        if (globalX < halfWidth) {
+                                            offset = halfWidth - globalX;
+                                        } else if (globalX > seekbarWidth - halfWidth) {
+                                            offset = (seekbarWidth - halfWidth) - globalX;
+                                        }
+                                        return offset;
+                                    })()}px) scale(${isFullscreen ? 1.6 : 1.1})`
+                                }}
+                            >
+                                <div className="w-[180px] aspect-video bg-black/90 border-2 border-pink-500/80 rounded-lg overflow-hidden shadow-[0_0_20px_rgba(236,72,153,0.4)] relative flex items-center justify-center">
+                                    {hasSprite ? (
+                                        <div style={getSpriteStyle(previewTime)} />
+                                    ) : (
+                                        <img
+                                            src={`${src}${src.includes('?') ? '&' : '?'}thumb=true&time=${previewTime}`}
+                                            className="w-full h-full object-cover"
+                                            alt="Preview"
+                                        />
+                                    )}
+                                    {/* Overlay: Nearby Marker Info */}
+                                    {(() => {
+                                        // 2秒以内のマーカーを探す
+                                        const nearbyMarker = markers.find(m => Math.abs(m.time - previewTime) < 2);
+                                        if (nearbyMarker) {
+                                            return (
+                                                <div className="absolute inset-x-0 bottom-6 bg-gradient-to-t from-black/80 to-transparent pt-4 pb-1 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
+                                                    <div className="text-3xl drop-shadow-md mb-0.5 animate-bounce">
+                                                        {nearbyMarker.icon}
+                                                    </div>
+                                                    {nearbyMarker.label && (
+                                                        <div className="text-[10px] font-bold text-pink-200 bg-pink-900/50 px-2 py-0.5 rounded-full border border-pink-500/30 backdrop-blur-sm">
+                                                            {nearbyMarker.label}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+
+                                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black via-black/60 to-transparent text-white text-xs font-bold font-mono text-center py-1 pb-0.5">
+                                        {formatTime(previewTime)}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Arrow Pointer (Always Centered on Mouse) */}
+                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-pink-500/80 mt-[-1px]"></div>
+                        </div>
+                    )}
+
                     {/* Track */}
                     <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
                         {/* 🔁 Loop Region */}
@@ -885,11 +1031,11 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                                         ? "bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.6)] group-hover/marker:bg-cyan-100 group-hover/marker:shadow-[0_0_12px_rgba(34,211,238,1)]"
                                         : "bg-yellow-400 group-hover/marker:bg-pink-400 group-hover/marker:shadow-pink-500/50"
                                     }`}></div>
-                                {/* Tooltip (Unified Box Mode) */}
+                                {/* Tooltip (Unified Box Mode) - HIDDEN when preview is active */}
                                 <div className={`absolute bottom-0 pb-8 left-1/2 -translate-x-1/2 transition-all duration-200 z-[100] text-shadow-sm
                                     ${contextMenu?.markerId === m.id
                                         ? "opacity-100 translate-y-0 pointer-events-auto"
-                                        : "opacity-0 translate-y-2 group-hover/marker:opacity-100 group-hover/marker:translate-y-0 pointer-events-none group-hover/marker:pointer-events-auto"
+                                        : (previewTime !== null ? "opacity-0 pointer-events-none" : "opacity-0 translate-y-2 group-hover/marker:opacity-100 group-hover/marker:translate-y-0 pointer-events-none group-hover/marker:pointer-events-auto")
                                     }`}>
                                     <div className="bg-zinc-900/90 backdrop-blur-md border border-pink-500/30 p-3 rounded-xl shadow-2xl flex flex-col items-center gap-1 min-w-[100px]">
                                         {/* Big Emoji */}

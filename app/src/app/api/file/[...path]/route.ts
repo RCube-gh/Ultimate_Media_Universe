@@ -103,20 +103,103 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     }
 
     // 🖼️ Thumbnail Request Logic
-    // Only support images for now
+    // Only support images for now (and Videos via FFmpeg)
     const isImage = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"].includes(ext);
-    if (!isImage) {
-        return new NextResponse("Not an image", { status: 400 });
+    const isVideo = [".mp4", ".webm", ".mkv", ".avi", ".mov", ".m4v"].includes(ext);
+
+    if (!isImage && !isVideo) {
+        return new NextResponse("Not an image or video", { status: 400 });
     }
 
     try {
-        // Create unique cache filename
-        // Consistent with scanner logic if possible, or independent hashing
-        // Scanner uses: [itemId]/[hash].webp. Here we don't know itemId easily.
-        // So we use a flat hash of the full path for fallback generation.
-        // NOTE: If we want to align with Scanner cache, we need to know the structure.
-        // For now, let's use a simple hash of the path to keep it robust and independent.
+        // Video Thumbnail Logic (Seekbar Preview)
+        if (isVideo) {
+            const isSprite = searchParams.has("sprite");
+            if (isSprite) {
+                const hash = crypto.createHash("md5").update(fullPath).digest("hex");
+                const spriteFilename = `${hash}_sprite.jpg`;
+                const spritePath = path.join(CACHE_ROOT, spriteFilename);
 
+                if (fs.existsSync(spritePath)) {
+                    const stats = fs.statSync(spritePath);
+                    if (stats.size > 0) {
+                        const spriteBuffer = await fsPromises.readFile(spritePath);
+                        return new NextResponse(spriteBuffer, {
+                            headers: {
+                                "Content-Type": "image/jpeg",
+                                "Cache-Control": "public, max-age=31536000, immutable",
+                                "X-Cache": "HIT",
+                            },
+                        });
+                    } else {
+                        return new NextResponse("Sprite Empty", { status: 404 });
+                    }
+                } else {
+                    return new NextResponse("Sprite not found", { status: 404 });
+                }
+            }
+
+            const timeParam = searchParams.get("time");
+            // If no time is specified for a video, we might want a default thumb (e.g. at 10s or 10%)
+            // For now, let's assume time=0 if not provided, or handle as "poster" request
+            const time = parseFloat(timeParam || "0");
+
+            // Unique cache for this specific timestamp
+            const hashKey = `${fullPath}_time_${time}`;
+            const hash = crypto.createHash("md5").update(hashKey).digest("hex");
+            const cacheFilename = `${hash}_vid_thumb.jpg`; // Use JPG for speed/compatibility from FFmpeg
+            const cachePath = path.join(CACHE_ROOT, cacheFilename);
+
+            // A. Check Cache
+            if (fs.existsSync(cachePath)) {
+                // Check if file is empty (sometimes ffmpeg fails)
+                const stat = fs.statSync(cachePath);
+                if (stat.size > 0) {
+                    const cachedBuffer = await fsPromises.readFile(cachePath);
+                    return new NextResponse(cachedBuffer, {
+                        headers: {
+                            "Content-Type": "image/jpeg",
+                            "Cache-Control": "public, max-age=31536000, immutable",
+                            "X-Cache": "HIT",
+                        },
+                    });
+                }
+            }
+
+            // B. Generate Fallback (MISS)
+            // console.log(`🎥 Generating video thumb: ${relativePath} @ ${time}s`);
+
+            // Construct FFmpeg command
+            // -y: Overwrite
+            // -ss: Seek to time (fast seek before input)
+            // -i: Input
+            // -vframes 1: Only one frame
+            // -vf scale: Resize height to 180 (optimizing for small preview), width auto. 
+            // NOTE: Preview is usually small, standard is often 160-200px height.
+            const ffmpegCmd = `ffmpeg -y -ss ${time} -i "${fullPath}" -vframes 1 -vf "scale=-1:180" -q:v 5 "${cachePath}"`;
+
+            const { exec } = await import("child_process");
+            const util = await import("util");
+            const execAsync = util.promisify(exec);
+
+            await execAsync(ffmpegCmd);
+
+            // Read back
+            if (fs.existsSync(cachePath)) {
+                const generatedBuffer = await fsPromises.readFile(cachePath);
+                return new NextResponse(generatedBuffer, {
+                    headers: {
+                        "Content-Type": "image/jpeg",
+                        "Cache-Control": "public, max-age=31536000, immutable",
+                        "X-Cache": "MISS",
+                    },
+                });
+            } else {
+                throw new Error("FFmpeg failed to generate output file");
+            }
+        }
+
+        // Image Logic (Existing)
         const hash = crypto.createHash("md5").update(fullPath).digest("hex");
         const cacheFilename = `${hash}_thumb.webp`; // Flat structure or subdir? Flat for simplicity in fallback.
         const cachePath = path.join(CACHE_ROOT, cacheFilename);

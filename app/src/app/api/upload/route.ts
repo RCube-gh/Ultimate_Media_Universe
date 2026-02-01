@@ -23,6 +23,40 @@ async function getVideoDuration(filePath: string): Promise<number | null> {
     return null;
 }
 
+// 🎞️ Helper: Generate Sprite Sheet
+async function generateSpriteSheet(videoPath: string, spritePath: string, duration: number) {
+    // Configuration
+    const interval = 10; // Capture every 10 seconds
+    const thumbWidth = 160; // Standard preview width
+    const thumbHeight = 90; // Standard preview height (16:9)
+    const columns = 10; // 10 images per row
+
+    // Calculate required grid
+    const totalImages = Math.ceil(duration / interval);
+    const rows = Math.ceil(totalImages / columns);
+
+    // FFmpeg Command
+    // -vf select: pick frames
+    // -vf scale: resize each frame
+    // -vf tile: stitch grid
+    // -vsync 0: process frames as they come
+    const cmd = `ffmpeg -y -i "${videoPath}" -vf "select='not(mod(n,${interval}*24))',scale=${thumbWidth}:${thumbHeight},tile=${columns}x${rows}" -frames:v 1 -q:v 2 "${spritePath}"`;
+
+    // NOTE: 'select' filter with time is tricky. Using fps filter is easier:
+    // fps=1/10 means 1 frame every 10 seconds.
+    const cmd2 = `ffmpeg -y -i "${videoPath}" -vf "fps=1/${interval},scale=${thumbWidth}:${thumbHeight},tile=${columns}x${rows}" -frames:v 1 -q:v 2 "${spritePath}"`;
+
+    console.log(`🎬 Generating Sprite Sheet: ${spritePath}`);
+    // console.log(`Command: ${cmd2}`);
+
+    try {
+        await execAsync(cmd2);
+        console.log("✅ Sprite Sheet Generated!");
+    } catch (e) {
+        console.error("❌ Sprite Gen Failed:", e);
+    }
+}
+
 export async function POST(req: NextRequest) {
     console.log("🔥 [API] Upload Request Received");
 
@@ -186,6 +220,39 @@ export async function POST(req: NextRequest) {
 
             if (type === "VIDEO") {
                 duration = await getVideoDuration(savePath);
+
+                if (duration) {
+                    // 🎞️ Trigger Sprite Gen
+                    // Construct consistent cache path: /library/.cache/thumbnails/[hash]_sprite.jpg
+                    try {
+                        // Use MD5 of the filePath (relative or absolute? Scanner uses absolute scan path usually, but here we have absolute savePath)
+                        // To be safe and consistent with route.ts logic which allows hashed access:
+                        // The file route uses: crypto.createHash("md5").update(fullPath).digest("hex");
+                        const { createHash } = await import("crypto");
+                        const hash = createHash("md5").update(savePath).digest("hex");
+
+                        const spriteName = `${hash}_sprite.jpg`;
+                        const spritePath = join(thumbDir, spriteName); // thumbDir is already .cache/thumbnails or similar in other contexts? 
+
+                        // Wait! thumbDir in this file is defined as `join(libraryDir, "thumbnails")` which is `library/thumbnails`.
+                        // BUT route.ts (the file server) looks in `.cache/thumbnails` relative to app root?
+                        // Let's check `route.ts`. It uses: CACHE_ROOT = path.join(PROCESS_ROOT, ".cache", "thumbnails");
+                        // We must match that location!
+
+                        const PROCESS_ROOT = process.cwd();
+                        const CACHE_ROOT = join(PROCESS_ROOT, ".cache", "thumbnails");
+                        await mkdir(CACHE_ROOT, { recursive: true });
+
+                        const targetSpritePath = join(CACHE_ROOT, spriteName);
+
+                        // Run in background (don't await fully if you want fast response, but for now await to ensure it exists)
+                        // Actually, let's await it so the user sees it immediately.
+                        await generateSpriteSheet(savePath, targetSpritePath, duration);
+
+                    } catch (e) {
+                        console.error("Failed to setup sprite generation", e);
+                    }
+                }
             }
         }
 
