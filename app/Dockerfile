@@ -1,77 +1,82 @@
-
-# 🏗️ Stage 1: Install dependencies
+# ================================
+# Stage 1: deps
+# ================================
 FROM node:20-alpine AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat python3 make g++ openssl openssl-dev
+
+# Prisma / native deps
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++ \
+    openssl \
+    openssl-dev
 
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# 🏗️ Stage 2: Build the app
+
+# ================================
+# Stage 2: builder
+# ================================
 FROM node:20-alpine AS builder
+
 WORKDIR /app
 COPY . .
 
-# 🔥 Remove any existing .next folder AND node_modules to prevent pollution!
-RUN rm -rf .next
-RUN rm -rf node_modules
+# 念のため汚染除去
+RUN rm -rf .next node_modules
 
-# Restore clean node_modules from deps stage
+# clean node_modules を復元
 COPY --from=deps /app/node_modules ./node_modules
 
-# Generate Prisma Client
+# Prisma Client 生成（★重要）
 RUN npx prisma generate
 
-# Disable telemetry during build
+# telemetry off
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Build Next.js app
+# Next.js build（standalone 出力）
 RUN npm run build
 
-# 🏗️ Stage 3: Production image, copy all the files and run next
+
+# ================================
+# Stage 3: runner (production)
+# ================================
 FROM node:20-alpine AS runner
+
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# 非 root ユーザー
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 nextjs
 
-# Set correct permissions for nextjs user
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+# ---- Next.js standalone ----
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# Explicitly copy Prisma Client
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+# ---- Prisma runtime 必須物 ----
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# Copy Prisma schema and migrations for runtime usage if needed (e.g. migrations)
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+# Prisma schema（migrate 等で使う場合）
+COPY --from=builder /app/prisma ./prisma
 
-# Also need db/assets folders
-# We will mount volumes for these in docker-compose, but we need the directories to exist
-RUN mkdir -p /app/db /app/library && chown nextjs:nodejs /app/db /app/library
-
-# Install Prisma CLI for production migrations
-RUN npm install prisma@5.22.0
-RUN chown -R nextjs:nodejs /app/node_modules
+# ★ runtime では @prisma/client を“ちゃんと”入れる
+RUN npm install --omit=dev @prisma/client prisma \
+ && chown -R nextjs:nodejs /app
 
 USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
-# set hostname to localhost
-ENV HOSTNAME "0.0.0.0"
-
-# Start script
 CMD ["node", "server.js"]
+
