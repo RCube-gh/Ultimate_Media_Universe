@@ -263,8 +263,29 @@ export async function POST(req: NextRequest) {
                         // Actually, let's await it so the user sees it immediately.
                         await generateSpriteSheet(savePath, targetSpritePath, duration);
 
+                        // 🖼️ Auto-Generate Thumbnail if missing
+                        if (!thumbnailPath) {
+                            console.log("🖼️ No manual thumbnail provided. Auto-generating from video...");
+                            const thumbName = `${hash}_thumb_auto.jpg`;
+                            const targetThumbPath = join(thumbDir, thumbName);
+
+                            try {
+                                // Extract frame at 20% or 5s, whichever is smaller but at least 1s
+                                const time = Math.min(Math.max(duration * 0.2, 1), 10);
+
+                                await execAsync(
+                                    `ffmpeg -y -ss ${time} -i "${savePath}" -vframes 1 -q:v 2 "${targetThumbPath}"`
+                                );
+
+                                thumbnailPath = `/api/file/thumbnails/${thumbName}`;
+                                console.log(`✅ Auto-Thumbnail Generated: ${thumbnailPath}`);
+                            } catch (e) {
+                                console.error("❌ Auto-Thumbnail Gen Failed:", e);
+                            }
+                        }
+
                     } catch (e) {
-                        console.error("Failed to setup sprite generation", e);
+                        console.error("Failed to setup sprite/thumb generation", e);
                     }
                 }
             }

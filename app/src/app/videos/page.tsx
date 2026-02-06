@@ -65,14 +65,22 @@ function VideoCard({ item }: { item: any }) {
             className="group relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-pink-500/50 hover:shadow-xl hover:shadow-pink-500/10 transition-all duration-300 transform hover:-translate-y-1"
         >
             {/* 🎥 Thumbnail Area */}
-            <div className="aspect-video overflow-hidden bg-zinc-950 relative">
+            <div className="aspect-video overflow-hidden bg-zinc-950 relative group/thumb">
                 {item.thumbnail ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                        src={item.thumbnail}
-                        alt={item.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80 group-hover:opacity-100"
-                    />
+                    <>
+                        {/* Layer 1: Blurred Background */}
+                        <div
+                            className="absolute inset-0 bg-cover bg-center opacity-40 blur-xl scale-110"
+                            style={{ backgroundImage: `url('${item.thumbnail}')` }}
+                        />
+                        {/* Layer 2: Main Image (Contained) */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={item.thumbnail}
+                            alt={item.title}
+                            className="absolute inset-0 w-full h-full object-contain z-10 transition-transform duration-500 group-hover:scale-105"
+                        />
+                    </>
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-700 bg-zinc-900 group-hover:bg-zinc-800 transition-colors">
                         <Film size={48} />
@@ -80,14 +88,14 @@ function VideoCard({ item }: { item: any }) {
                 )}
 
                 {/* ▶ Play Button Overlay */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
                     <div className="w-16 h-16 rounded-full bg-pink-600 text-white flex items-center justify-center shadow-lg shadow-pink-600/40 transform scale-50 group-hover:scale-100 transition-transform duration-300">
                         <Play size={32} fill="currentColor" className="ml-1" />
                     </div>
                 </div>
 
                 {/* 🏷️ Type Badge (左上) */}
-                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded border border-white/10 uppercase">
+                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded border border-white/10 uppercase z-20">
                     VIDEO
                 </div>
             </div>

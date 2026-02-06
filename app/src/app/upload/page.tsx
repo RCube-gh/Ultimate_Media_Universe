@@ -430,24 +430,61 @@ export default function UploadPage() {
             <div className="w-full md:w-1/2 bg-zinc-900/30 flex flex-col p-8 animate-in slide-in-from-right duration-500 delay-100">
                 <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-6">
 
-                    {/* 🖼️ Thumbnail Preview Area (Hidden for Manga) */}
-                    {activeType !== "MANGA" && (
+                    {/* 🖼️ Thumbnail Preview Area (Hidden for Manga & Audio) */}
+                    {activeType !== "MANGA" && activeType !== "AUDIO" && (
                         <div
                             ref={pasteAreaRef}
-                            className="aspect-video bg-zinc-950 rounded-2xl border border-zinc-800 flex flex-col items-center justify-center relative overflow-hidden group transition-all hover:border-pink-500/50 shrink-0"
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const files = e.dataTransfer.files;
+                                if (files && files.length > 0) {
+                                    const file = files[0];
+                                    if (file.type.startsWith("image")) {
+                                        setThumbnailPreview(URL.createObjectURL(file));
+                                        setThumbnailFile(file);
+                                    } else {
+                                        alert("⚠️ Only image files are allowed for thumbnails.");
+                                    }
+                                }
+                            }}
+                            className="aspect-video bg-zinc-950 rounded-2xl border border-zinc-800 flex flex-col items-center justify-center relative overflow-hidden group transition-all hover:border-pink-500/50 shrink-0 cursor-pointer"
+                            onClick={() => document.getElementById("thumb-input")?.click()}
                         >
+                            <input
+                                type="file"
+                                id="thumb-input"
+                                className="hidden"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    if (e.target.files && e.target.files.length > 0) {
+                                        const file = e.target.files[0];
+                                        setThumbnailPreview(URL.createObjectURL(file));
+                                        setThumbnailFile(file);
+                                    }
+                                }}
+                            />
                             {thumbnailPreview ? (
                                 <>
+                                    {/* Layer 1: Blurred Background */}
+                                    <div
+                                        className="absolute inset-0 bg-cover bg-center opacity-50 blur-xl scale-110"
+                                        style={{ backgroundImage: `url('${thumbnailPreview}')` }}
+                                    />
+
+                                    {/* Layer 2: Main Image (Contained) */}
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={thumbnailPreview} alt="Preview" className="w-full h-full object-cover" />
+                                    <img src={thumbnailPreview} alt="Preview" className="w-full h-full object-contain relative z-10" />
 
                                     <button
                                         type="button"
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                            e.stopPropagation();
                                             setThumbnailPreview(null);
                                             setThumbnailFile(null);
                                         }}
-                                        className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500 transition-colors"
+                                        className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500 transition-colors z-20"
                                     >
                                         <X size={16} />
                                     </button>
@@ -455,8 +492,10 @@ export default function UploadPage() {
                             ) : (
                                 <>
                                     <ImageIcon className="text-zinc-700 w-12 h-12 mb-2 group-hover:text-pink-500 transition-colors" />
-                                    <span className="text-zinc-500 text-sm font-medium group-hover:text-zinc-300">Thumbnail Preview</span>
-                                    <p className="text-zinc-600 text-xs mt-1">Ctrl+V to paste image</p>
+                                    <span className="text-zinc-500 text-sm font-medium group-hover:text-zinc-300">
+                                        Drop Image or Paste (Ctrl+V)
+                                    </span>
+                                    <p className="text-zinc-600 text-xs mt-1">or click to browse</p>
                                 </>
                             )}
                         </div>
