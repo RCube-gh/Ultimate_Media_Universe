@@ -288,6 +288,11 @@ export async function POST(req: NextRequest) {
                         console.error("Failed to setup sprite/thumb generation", e);
                     }
                 }
+            } else if (type === "IMAGE") {
+                // 🖼️ For Image type, use the file itself as thumbnail if not provided
+                if (!thumbnailPath) {
+                    thumbnailPath = filePath;
+                }
             }
         }
 

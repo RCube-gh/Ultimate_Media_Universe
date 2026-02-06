@@ -2,7 +2,7 @@
 
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ListMusic, Music2, Share2, Clock, Calendar, Maximize, Minimize, Settings as SettingsIcon, X, ChevronLeft, Disc, Image as ImageIcon, MapPin } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ListMusic, Music2, Share2, Clock, Calendar, Maximize, Minimize, Settings as SettingsIcon, X, ChevronLeft, Disc, Image as ImageIcon, MapPin, Eye } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
@@ -1096,7 +1096,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                         </h4>
                                         <div className="flex items-center gap-2 text-xs text-zinc-500">
                                             <div className="flex items-center gap-1">
-                                                <span className="">👁️</span>
+                                                <Eye className="w-3 h-3" />
                                                 {rec.viewCount}
                                             </div>
                                             <span>•</span>

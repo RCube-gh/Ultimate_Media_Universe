@@ -17,6 +17,8 @@ export default function UploadPage() {
 
     // 📂 Main File State (The content itself)
     const [mainFile, setMainFile] = useState<File | null>(null);
+    // 📸 Image Queue State (For Batch Upload)
+    const [fileQueue, setFileQueue] = useState<File[]>([]);
 
     // 🖼️ Thumbnail State
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
@@ -115,6 +117,34 @@ export default function UploadPage() {
 
         const files = e.dataTransfer.files;
         if (files && files.length > 0) {
+
+            // 🖼️ IMAGE MODE: Batch Upload
+            if (activeType === "IMAGE") {
+                const newImages: File[] = [];
+                let rejectedCount = 0;
+
+                Array.from(files).forEach(file => {
+                    if (file.type.startsWith("image")) {
+                        newImages.push(file);
+                    } else {
+                        rejectedCount++;
+                    }
+                });
+
+                if (newImages.length > 0) {
+                    setFileQueue(prev => [...prev, ...newImages]);
+                    // Auto-set the first one as "main" just for preview logic compatibility if needed, 
+                    // or we handle preview separately for queue.
+                    if (!mainFile) setMainFile(newImages[0]);
+                }
+
+                if (rejectedCount > 0) {
+                    alert(`⚠️ Ignored ${rejectedCount} non-image files.`);
+                }
+                return;
+            }
+
+            // 🎵/🎬 Other Modes: Single File
             const file = files[0];
             setMainFile(null);
             console.log("📂 Checking File:", file.name);
@@ -179,47 +209,106 @@ export default function UploadPage() {
 
         setIsSubmitting(true);
         setUploadProgress(0);
-        setStatusMessage("Starting Upload...");
 
-        const formData = new FormData(event.currentTarget);
+        const formEl = event.currentTarget;
+        const formDataBase = new FormData(formEl);
+        const baseTitle = formDataBase.get("title") as string;
+        const description = formDataBase.get("description") as string;
+
+        // 🖼️ BATCH UPLOAD LOGIC
+        if (activeType === "IMAGE" && fileQueue.length > 0) {
+            setStatusMessage(`Queued ${fileQueue.length} files...`);
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let i = 0; i < fileQueue.length; i++) {
+                const file = fileQueue[i];
+                setStatusMessage(`Uploading ${i + 1}/${fileQueue.length}: ${file.name}`);
+
+                try {
+                    const formData = new FormData();
+                    formData.append("type", "IMAGE");
+                    formData.append("mainFile", file);
+                    formData.append("description", description);
+
+                    // Auto Title: Use base title + index if provided, else filename
+                    if (baseTitle) {
+                        formData.append("title", fileQueue.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle);
+                    } else {
+                        // Strip extension for title
+                        const autoName = file.name.replace(/\.[^/.]+$/, "");
+                        formData.append("title", autoName);
+                    }
+
+                    // Tags (Common)
+                    if (tags.length > 0) {
+                        formData.append("tags", JSON.stringify(tags.map(t => t.name)));
+                    }
+
+                    await axios.post("/api/upload", formData, {
+                        headers: { "Content-Type": "multipart/form-data" }
+                    });
+
+                    successCount++;
+                } catch (e) {
+                    console.error(`Failed to upload ${file.name}:`, e);
+                    failCount++;
+                }
+
+                // Update Progress (Step-wise)
+                setUploadProgress(Math.round(((i + 1) / fileQueue.length) * 100));
+            }
+
+            setStatusMessage(failCount === 0 ? "All Complete! 🎉" : `Done. Success: ${successCount}, Failed: ${failCount}`);
+            alert(`Batch Upload Finished!\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
+
+            // Cleanup
+            if (successCount > 0) {
+                setFileQueue([]);
+                setMainFile(null); // Clear preview
+                formEl.reset();
+                setTags([]);
+                setStatusMessage("");
+                setUploadProgress(0);
+            }
+            setIsSubmitting(false);
+            return;
+        }
+
+        // 🎬 SINGLE FILE LOGIC (Original)
+        setStatusMessage("Starting Upload...");
+        const formData = new FormData(formEl);
         formData.append("type", activeType);
 
-        // URL or File
         if (mainFile) {
             formData.append("mainFile", mainFile);
         } else {
             formData.append("url", targetUrl);
         }
 
-        // Thumbnail
         if (thumbnailFile) {
             formData.append("thumbnailFile", thumbnailFile);
         }
 
-        // Track Titles (Audio ZIP)
         if (Object.keys(trackTitles).length > 0) {
             formData.append("trackTitles", JSON.stringify(trackTitles));
         }
 
-        // Tags
         if (tags.length > 0) {
             formData.append("tags", JSON.stringify(tags.map(t => t.name)));
         }
 
         try {
-            // 🚀 Use Axios for Progress Tracking!
-            // We connect to our new API route instead of Server Action directly
             const response = await axios.post("/api/upload", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {
                         const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                         setUploadProgress(percent);
-
                         if (percent < 100) {
                             setStatusMessage(`Uploading... ${percent}%`);
                         } else {
-                            setStatusMessage("Processing on Server... (Unzipping & Scanning)");
+                            setStatusMessage("Processing on Server...");
                         }
                     }
                 },
@@ -230,7 +319,6 @@ export default function UploadPage() {
                 setStatusMessage("Complete! 🎉");
                 alert("Entry Saved! 💓\n" + response.data.message);
 
-                // Reset ALL
                 setTargetUrl("");
                 setMainFile(null);
                 setThumbnailPreview(null);
@@ -238,20 +326,17 @@ export default function UploadPage() {
                 setUploadProgress(0);
                 setStatusMessage("");
                 setTags([]);
+                formEl.reset(); // Also reset form inputs
             } else {
                 setStatusMessage("Failed.");
                 alert("Error: " + response.data.message);
             }
         } catch (e: any) {
             console.error("💥 [Client] Upload Error:", e);
-
-            // Detailed Error Extraction
             let errorMessage = e.message;
             if (e.response && e.response.data) {
-                console.error("💥 [Server Response Data]:", e.response.data);
                 errorMessage = e.response.data.message || JSON.stringify(e.response.data);
             }
-
             setStatusMessage("Error occurred during upload.");
             alert("Failed to upload:\n" + errorMessage);
         } finally {
@@ -298,7 +383,11 @@ export default function UploadPage() {
                         <button
                             key={type.id}
                             type="button"
-                            onClick={() => setActiveType(type.id)}
+                            onClick={() => {
+                                setActiveType(type.id);
+                                setFileQueue([]); // Reset batch queue on type change
+                                setMainFile(null); // Explicitly clear/reset main file usually nice too
+                            }}
                             className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all text-sm font-bold whitespace-nowrap ${activeType === type.id
                                 ? 'bg-pink-600 border-pink-500 text-white shadow-lg shadow-pink-900/50'
                                 : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white'
@@ -329,7 +418,60 @@ export default function UploadPage() {
                     <div className="z-10 flex flex-col items-center gap-6 w-full max-w-md">
 
                         {/* 🚚 State: File Loaded */}
-                        {mainFile ? (
+                        {(activeType === "IMAGE" && fileQueue.length > 0) ? (
+                            /* 🖼️ BATCH IMAGE QUEUE */
+                            <div className="w-full flex flex-col items-center animate-in zoom-in duration-300">
+                                <div className="flex items-center gap-2 mb-4 bg-pink-500/10 px-4 py-2 rounded-full border border-pink-500/30">
+                                    <ImageIcon className="text-pink-500 w-5 h-5" />
+                                    <span className="text-pink-200 font-bold text-sm">Batch Upload: {fileQueue.length} files</span>
+                                </div>
+
+                                <div className="w-full grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar p-2 bg-zinc-950/50 rounded-xl border border-white/5">
+                                    {fileQueue.map((file, idx) => (
+                                        <div key={idx} className="relative aspect-square group rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800">
+                                            {/* Thumbnail (Use createObjectURL carefully, or just nice icon) */}
+                                            {/* For performance with many files, maybe just an icon or lazy load. Let's try direct object URL for now but revoke later? React handles it mostly ok for small batches. */}
+                                            <img
+                                                src={URL.createObjectURL(file)}
+                                                alt={file.name}
+                                                className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity"
+                                                onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)} // Auto-revoke on load to save memory! Smart!
+                                            />
+
+                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const newQ = [...fileQueue];
+                                                        newQ.splice(idx, 1);
+                                                        setFileQueue(newQ);
+                                                        if (newQ.length === 0) setMainFile(null);
+                                                    }}
+                                                    className="p-1 bg-red-500 hover:bg-red-400 text-white rounded-full shadow-lg transform hover:scale-110 transition-all"
+                                                    title="Remove"
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {/* Add More Placeholder (Visual only, drag to area still works) */}
+                                    <div className="aspect-square flex items-center justify-center border-2 border-dashed border-zinc-800 rounded-lg text-zinc-600 text-xs text-center p-2">
+                                        Drop more
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setFileQueue([]); setMainFile(null); }}
+                                    className="mt-4 text-xs text-zinc-500 hover:text-red-400 underline transition-colors"
+                                >
+                                    Clear All Images
+                                </button>
+                            </div>
+                        ) : mainFile ? (
                             <div className="animate-in zoom-in duration-300 flex flex-col items-center">
                                 <div className="w-24 h-24 rounded-2xl bg-zinc-900 border border-pink-500/50 flex items-center justify-center shadow-2xl shadow-pink-500/20 mb-4">
                                     <StatusIcon className="w-10 h-10 text-pink-500" />
@@ -430,8 +572,8 @@ export default function UploadPage() {
             <div className="w-full md:w-1/2 bg-zinc-900/30 flex flex-col p-8 animate-in slide-in-from-right duration-500 delay-100">
                 <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-6">
 
-                    {/* 🖼️ Thumbnail Preview Area (Hidden for Manga & Audio) */}
-                    {activeType !== "MANGA" && activeType !== "AUDIO" && (
+                    {/* 🖼️ Thumbnail Preview Area (Hidden for Manga, Audio, & Image) */}
+                    {activeType !== "MANGA" && activeType !== "AUDIO" && activeType !== "IMAGE" && (
                         <div
                             ref={pasteAreaRef}
                             onDragOver={handleDragOver}

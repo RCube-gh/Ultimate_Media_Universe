@@ -7,11 +7,17 @@ import { formatDistanceToNow } from "date-fns";
 // Revalidate every 60 seconds (ISR equivalent) or 0 for dynamic
 export const revalidate = 0;
 
-export default async function Home() {
-    // 🕵️‍♀️ Fetch Real Data
+export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+    const { q } = await searchParams;
+    const query = q || "";
+
+    // 🕵️‍♀️ Fetch Real Data with Search
     const newArrivals = await prisma.mediaItem.findMany({
+        where: query ? {
+            title: { contains: query }
+        } : {},
         orderBy: { createdAt: "desc" },
-        take: 10,
+        take: 20, // Increased fetch limit for search results visibility
     });
 
     const totalCount = await prisma.mediaItem.count();
@@ -84,6 +90,8 @@ export default async function Home() {
                                     case 'VIDEO': return `/videos/${item.id}`;
                                     case 'AUDIO': return `/audio/${item.id}`;
                                     case 'MANGA': return `/manga/${item.id}`;
+                                    case 'IMAGE': return `/images`;
+                                    case 'LINK': return `/links`;
                                     default: return `/videos/${item.id}`;
                                 }
                             };
