@@ -13,11 +13,14 @@ RUN npm ci
 # 🏗️ Stage 2: Build the app
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 🔥 Remove any existing .next folder to prevent Turbopack cache pollution!
+# 🔥 Remove any existing .next folder AND node_modules to prevent pollution!
 RUN rm -rf .next
+RUN rm -rf node_modules
+
+# Restore clean node_modules from deps stage
+COPY --from=deps /app/node_modules ./node_modules
 
 # Generate Prisma Client
 RUN npx prisma generate
