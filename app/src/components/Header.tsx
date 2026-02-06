@@ -2,6 +2,7 @@
 
 import { Search, Menu, Heart, Bell, User } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 import { SearchBar } from "./SearchBar";
 
 interface HeaderProps {
@@ -33,7 +34,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
             {/* Center: Search Bar */}
             <div className="flex-1 max-w-2xl mx-4">
-                <SearchBar />
+                <Suspense fallback={<div className="h-10 w-full bg-zinc-900 rounded-full animate-pulse" />}>
+                    <SearchBar />
+                </Suspense>
             </div>
 
             {/* Right: Actions & User */}
