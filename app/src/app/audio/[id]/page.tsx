@@ -74,7 +74,8 @@ export default async function AudioPage({ params }: PageProps) {
                         return {
                             url: `/api/file/${relativeRoot}/${t.file.replaceAll('\\', '/')}`,
                             title: rawTitle || "Unknown Track",
-                            index: t.index
+                            index: t.index,
+                            duration: t.duration || undefined
                         };
                     });
                 }
@@ -102,11 +103,58 @@ export default async function AudioPage({ params }: PageProps) {
             tracks.push({
                 url: item.filePath,
                 title: item.title,
-                index: 0
+                index: 0,
+                duration: item.duration || undefined
             });
             if (item.thumbnail) images.push(item.thumbnail);
         }
     }
+
+    // 🔍 Recommendations (Tags + Random)
+    const tagIds = item.tags.map(t => t.id);
+
+    let candidates = await prisma.mediaItem.findMany({
+        where: {
+            type: "AUDIO",
+            id: { not: id },
+            ...(tagIds.length > 0 ? {
+                tags: { some: { id: { in: tagIds } } }
+            } : {})
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+            id: true,
+            title: true,
+            thumbnail: true,
+            duration: true,
+            viewCount: true,
+            createdAt: true
+        }
+    });
+
+    if (candidates.length < 5) {
+        const more = await prisma.mediaItem.findMany({
+            where: {
+                type: "AUDIO",
+                id: { not: id, notIn: candidates.map(c => c.id) }
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+            select: {
+                id: true,
+                title: true,
+                thumbnail: true,
+                duration: true,
+                viewCount: true,
+                createdAt: true
+            }
+        });
+        candidates = [...candidates, ...more];
+    }
+
+    // 🔀 Shuffle
+    const recommendations = candidates.sort(() => Math.random() - 0.5).slice(0, 10);
 
     if (tracks.length === 0) {
         return (
@@ -143,6 +191,7 @@ export default async function AudioPage({ params }: PageProps) {
                 viewCount={item.viewCount}
                 rating={item.rating || 0}
                 isFavorite={item.isFavorite}
+                recommendations={recommendations}
             >
                 <MediaInfo item={item as any} />
             </AudioPlayer>

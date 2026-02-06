@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Calendar, Clock, Share2, List, Play } from "lucide-react";
+import { ChevronLeft, Calendar, Clock, Share2, List, Play, Eye } from "lucide-react";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { MediaInfo } from "@/components/MediaInfo";
 
@@ -23,14 +23,38 @@ export default async function VideoPlayerPage(props: Props) {
     if (!item) return notFound();
 
     // 2️⃣ Fetch "Recommended" (Up Next) - Exclude current, take 10 latest
-    const recommendations = await prisma.mediaItem.findMany({
+    // 2️⃣ Fetch "Recommended" (Up Next)
+    // 🏷️ Logic: Tags Match -> Shuffle -> Slice
+    const tagIds = item.tags.map(t => t.id);
+
+    // Primary: Match by tags
+    let candidates = await prisma.mediaItem.findMany({
         where: {
             type: "VIDEO",
-            id: { not: id }
+            id: { not: id },
+            ...(tagIds.length > 0 ? {
+                tags: { some: { id: { in: tagIds } } }
+            } : {})
         },
         orderBy: { createdAt: "desc" },
-        take: 10
+        take: 20
     });
+
+    // Fallback: If finding by tags returned too few, simple recent fetch
+    if (candidates.length < 5) {
+        const more = await prisma.mediaItem.findMany({
+            where: {
+                type: "VIDEO",
+                id: { not: id, notIn: candidates.map(c => c.id) }
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10
+        });
+        candidates = [...candidates, ...more];
+    }
+
+    // 🔀 Shuffle and Limit
+    const recommendations = candidates.sort(() => Math.random() - 0.5).slice(0, 10);
 
     const src = item.filePath || item.url;
     if (!src) return <div className="p-8">No source found.</div>;
@@ -81,10 +105,16 @@ export default async function VideoPlayerPage(props: Props) {
                                 {/* Thumb */}
                                 <div className="w-40 aspect-video bg-zinc-900 rounded-lg overflow-hidden relative shrink-0">
                                     {rec.thumbnail && (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={rec.thumbnail} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                        <>
+                                            <div
+                                                className="absolute inset-0 bg-cover bg-center opacity-40 blur-md scale-110"
+                                                style={{ backgroundImage: `url('${rec.thumbnail}')` }}
+                                            />
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={rec.thumbnail} alt="" className="absolute inset-0 w-full h-full object-contain z-10 transition-transform duration-500 group-hover:scale-105" />
+                                        </>
                                     )}
-                                    <div className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-bold px-1 rounded text-white">
+                                    <div className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-bold px-1 rounded text-white z-20">
                                         {rec.duration ? `${Math.floor(rec.duration / 60)}:${(rec.duration % 60).toString().padStart(2, '0')}` : "VID"}
                                     </div>
                                 </div>
@@ -93,9 +123,14 @@ export default async function VideoPlayerPage(props: Props) {
                                     <h4 className="font-bold text-sm leading-tight line-clamp-2 text-white group-hover:text-pink-400 transition-colors">
                                         {rec.title}
                                     </h4>
-                                    <p className="text-xs text-zinc-500">
-                                        {new Date(rec.createdAt).toLocaleDateString()}
-                                    </p>
+                                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                        <span className="flex items-center gap-1">
+                                            <Eye className="w-3 h-3" />
+                                            {rec.viewCount}
+                                        </span>
+                                        <span>•</span>
+                                        <span>{new Date(rec.createdAt).toLocaleDateString()}</span>
+                                    </div>
                                 </div>
                             </Link>
                         ))}

@@ -230,7 +230,7 @@ export async function scanAudioFolder(absolutePath: string, title?: string, cust
         }
 
         // 2. Separate Audio and Images
-        const tracks: { file: string, size: number, index: number, title: string }[] = [];
+        const tracks: { file: string, size: number, index: number, title: string, duration?: number }[] = [];
         const images: PageMeta[] = [];
         let totalSize = 0;
 
@@ -251,11 +251,16 @@ export async function scanAudioFolder(absolutePath: string, title?: string, cust
 
             if (isAudio(file)) {
                 let trackTitle = path.basename(file, path.extname(file)); // Default to filename
+                let duration = 0;
+
                 try {
                     const { parseFile } = await import('music-metadata');
                     const metadata = await parseFile(fullPath);
                     if (metadata.common.title) {
                         trackTitle = metadata.common.title;
+                    }
+                    if (metadata.format.duration) {
+                        duration = metadata.format.duration;
                     }
                 } catch (e) {
                     console.warn(`⚠️ Failed to parse metadata for ${file}`, e);
@@ -272,7 +277,8 @@ export async function scanAudioFolder(absolutePath: string, title?: string, cust
                     file, // Relative path
                     title: trackTitle,
                     size: stats.size,
-                    index: trackIndex++
+                    index: trackIndex++,
+                    duration
                 });
             } else if (isImage(file)) {
                 // Get Image Metadata
@@ -339,6 +345,9 @@ export async function scanAudioFolder(absolutePath: string, title?: string, cust
             images
         };
 
+        // Calculate total duration (seconds)
+        const totalDuration = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
+
         console.log("💾 Upserting to Database...");
         const item = await prisma.mediaItem.upsert({
             where: { filePath: absolutePath },
@@ -346,6 +355,7 @@ export async function scanAudioFolder(absolutePath: string, title?: string, cust
                 type: "AUDIO",
                 pages: images.length,
                 size: BigInt(totalSize),
+                duration: Math.round(totalDuration),
                 metadata: JSON.stringify(metadata),
                 isArchived: true,
                 thumbnail: thumbnailPath,
@@ -357,6 +367,7 @@ export async function scanAudioFolder(absolutePath: string, title?: string, cust
                 isArchived: true,
                 pages: images.length,
                 size: BigInt(totalSize),
+                duration: Math.round(totalDuration),
                 metadata: JSON.stringify(metadata),
                 thumbnail: thumbnailPath,
             }

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import MangaReader from "@/components/MangaReader";
 import { MediaInfo } from "@/components/MediaInfo";
+import { Eye } from "lucide-react";
 
 // No caching for reader to ensure fresh access
 export const revalidate = 0;
@@ -64,15 +65,34 @@ export default async function MangaReaderPage({ params }: PageProps) {
         console.error("Error parsing manga metadata:", e);
     }
 
-    // 🔍 Recommendations
-    const recommendations = await prisma.mediaItem.findMany({
+    // 🔍 Recommendations (Tags + Random)
+    const tagIds = item.tags.map(t => t.id);
+
+    let candidates = await prisma.mediaItem.findMany({
         where: {
             type: "MANGA",
             id: { not: id },
+            ...(tagIds.length > 0 ? {
+                tags: { some: { id: { in: tagIds } } }
+            } : {})
         },
         orderBy: { createdAt: "desc" },
-        take: 8
+        take: 16
     });
+
+    if (candidates.length < 4) {
+        const more = await prisma.mediaItem.findMany({
+            where: {
+                type: "MANGA",
+                id: { not: id, notIn: candidates.map(c => c.id) }
+            },
+            orderBy: { createdAt: "desc" },
+            take: 8
+        });
+        candidates = [...candidates, ...more];
+    }
+
+    const recommendations = candidates.sort(() => Math.random() - 0.5).slice(0, 8);
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white overflow-y-auto custom-scrollbar pb-20">
@@ -119,9 +139,14 @@ export default async function MangaReaderPage({ params }: PageProps) {
                                     <h4 className="font-bold text-sm leading-snug line-clamp-3 text-zinc-200 group-hover:text-pink-400 transition-colors">
                                         {rec.title}
                                     </h4>
-                                    <p className="text-xs text-zinc-500 mt-auto">
-                                        {new Date(rec.createdAt).toLocaleDateString()}
-                                    </p>
+                                    <div className="flex items-center gap-2 text-xs text-zinc-500 mt-auto">
+                                        <span className="flex items-center gap-1">
+                                            <Eye className="w-3 h-3" />
+                                            {rec.viewCount}
+                                        </span>
+                                        <span>•</span>
+                                        <span>{new Date(rec.createdAt).toLocaleDateString()}</span>
+                                    </div>
                                 </div>
                             </a>
                         ))}

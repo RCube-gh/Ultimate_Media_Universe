@@ -23,7 +23,21 @@ interface MangaReaderProps {
 type ViewMode = 'paged' | 'scroll';
 type SpreadMode = 'auto' | 'single';
 
+// Global debounce set for view counting (React Strict Mode fix)
+const recentViewers = new Set<string>();
+
 export default function MangaReader({ id, title, pages, backUrl, className }: MangaReaderProps) {
+    // 📊 View Counter (Debounced for Strict Mode)
+    useEffect(() => {
+        if (!id || recentViewers.has(id)) return;
+
+        recentViewers.add(id);
+        fetch(`/api/media/${id}/view`, { method: "POST" }).catch(console.error);
+
+        // Allow counting again after 2 seconds
+        setTimeout(() => recentViewers.delete(id), 2000);
+    }, [id]);
+
     // ⚙️ Settings
     const { settings } = useSettings();
 

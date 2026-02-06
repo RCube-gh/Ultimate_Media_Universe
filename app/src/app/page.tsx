@@ -78,50 +78,61 @@ export default async function Home() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {newArrivals.map((item) => (
-                            <Link href={item.type === "MANGA" ? `/manga/${item.id}` : `/video/${item.id}`} key={item.id} className="group flex flex-col gap-2 cursor-pointer">
+                        {newArrivals.map((item) => {
+                            const getHref = () => {
+                                switch (item.type) {
+                                    case 'VIDEO': return `/videos/${item.id}`;
+                                    case 'AUDIO': return `/audio/${item.id}`;
+                                    case 'MANGA': return `/manga/${item.id}`;
+                                    default: return `/videos/${item.id}`;
+                                }
+                            };
 
-                                {/* 🖼️ Cover Image */}
-                                <div className="aspect-[3/4] rounded-xl bg-zinc-800 border border-zinc-800 group-hover:border-pink-500/50 transition-all overflow-hidden relative">
-                                    {item.thumbnail ? (
-                                        <img
-                                            src={item.thumbnail}
-                                            alt={item.title}
-                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                            loading="lazy"
-                                        />
-                                    ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center text-zinc-700 bg-zinc-900">
-                                            {item.type === 'VIDEO' ? <Play /> : item.type === 'MANGA' ? <Book /> : <File />}
+                            return (
+                                <Link href={getHref()} key={item.id} className="group flex flex-col gap-2 cursor-pointer">
+
+                                    {/* 🖼️ Cover Image */}
+                                    <div className="aspect-[3/4] rounded-xl bg-zinc-800 border border-zinc-800 group-hover:border-pink-500/50 transition-all overflow-hidden relative">
+                                        {item.thumbnail ? (
+                                            <img
+                                                src={item.thumbnail}
+                                                alt={item.title}
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center text-zinc-700 bg-zinc-900">
+                                                {item.type === 'VIDEO' ? <Play /> : item.type === 'MANGA' ? <Book /> : <Music />}
+                                            </div>
+                                        )}
+
+                                        {/* Type Badge */}
+                                        <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-bold text-white border border-white/10">
+                                            {item.type}
                                         </div>
-                                    )}
 
-                                    {/* Type Badge */}
-                                    <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-bold text-white border border-white/10">
-                                        {item.type}
+                                        {/* Hover Overlay */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
+                                            <span className="text-xs text-pink-400 font-bold mb-1 flex items-center gap-1">
+                                                {item.type === "MANGA" ? "READ NOW" : item.type === "AUDIO" ? "LISTEN NOW" : "WATCH NOW"}
+                                                <Play size={10} className="fill-current" />
+                                            </span>
+                                        </div>
                                     </div>
 
-                                    {/* Hover Overlay */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                                        <span className="text-xs text-pink-400 font-bold mb-1 flex items-center gap-1">
-                                            {item.type === "MANGA" ? "READ NOW" : "WATCH NOW"}
-                                            <Play size={10} className="fill-current" />
-                                        </span>
+                                    {/* 📝 Meta */}
+                                    <div>
+                                        <h3 className="text-sm font-medium text-zinc-200 group-hover:text-pink-400 truncate transition-colors" title={item.title}>
+                                            {item.title}
+                                        </h3>
+                                        <p className="text-xs text-zinc-500 flex justify-between">
+                                            <span>{formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}</span>
+                                            {item.size && <span>{(Number(item.size) / (1024 * 1024)).toFixed(0)} MB</span>}
+                                        </p>
                                     </div>
-                                </div>
-
-                                {/* 📝 Meta */}
-                                <div>
-                                    <h3 className="text-sm font-medium text-zinc-200 group-hover:text-pink-400 truncate transition-colors" title={item.title}>
-                                        {item.title}
-                                    </h3>
-                                    <p className="text-xs text-zinc-500 flex justify-between">
-                                        <span>{formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}</span>
-                                        {item.size && <span>{(Number(item.size) / (1024 * 1024)).toFixed(0)} MB</span>}
-                                    </p>
-                                </div>
-                            </Link>
-                        ))}
+                                </Link>
+                            );
+                        })}
                     </div>
                 )}
             </section>

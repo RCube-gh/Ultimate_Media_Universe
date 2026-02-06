@@ -21,23 +21,49 @@ export type AudioTrack = {
     url: string;
     title: string;
     index: number;
+    duration?: number;
+};
+
+// Simplified type for recommendations to avoid circular deps or full Prisma type requirement
+type RecommendedItem = {
+    id: string;
+    title: string;
+    thumbnail: string | null;
+    duration: number | null;
+    viewCount: number;
+    createdAt: Date;
 };
 
 interface AudioPlayerProps {
     id: string;
     tracks: AudioTrack[];
-    images?: string[]; // Renamed from coverUrl
+    images?: string[];
     title: string;
     description?: string;
     createdAt: Date;
-    className?: string; // Keeping for compatibility but mostly unused now as we are full page
+    className?: string;
     viewCount: number;
     rating: number;
     isFavorite: boolean;
     children?: React.ReactNode;
+    recommendations?: RecommendedItem[];
 }
 
-export default function AudioPlayer({ id, tracks, images = [], title, description, createdAt, viewCount, rating, isFavorite, children }: AudioPlayerProps) {
+// Global debounce for view counting
+const recentViewers = new Set<string>();
+
+export default function AudioPlayer({ id, tracks, images = [], title, description, createdAt, viewCount, rating, isFavorite, children, recommendations = [] }: AudioPlayerProps) {
+    // 📊 View Counter
+    useEffect(() => {
+        if (!id || recentViewers.has(id)) return;
+
+        recentViewers.add(id);
+        fetch(`/api/media/${id}/view`, { method: "POST" }).catch(console.error);
+
+        // Allow counting again after 2 seconds
+        setTimeout(() => recentViewers.delete(id), 2000);
+    }, [id]);
+
     const audioRef = useRef<HTMLAudioElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -987,18 +1013,20 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                 📑 RIGHT COLUMN (Playlist)
                 span 1 (Sidebar)
                ============================= */}
-            <div className="flex flex-col gap-6 h-[calc(100vh-100px)] sticky top-6">
-                <div className="flex flex-col h-full bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="flex flex-col gap-6">
+
+                {/* 🎼 Tracklist */}
+                <div className="flex flex-col bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
                     {/* Header */}
-                    <div className="p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur sticky top-0 z-10">
+                    <div className="p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur sticky top-0 z-10 shrink-0">
                         <h3 className="font-bold text-zinc-200 flex items-center gap-2">
                             <ListMusic size={18} className="text-pink-500" />
                             Tracklist
                         </h3>
                     </div>
 
-                    {/* Scrollable List */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    {/* List */}
+                    <div className="p-2 space-y-1">
                         {tracks.map((track, i) => (
                             <button
                                 key={i}
@@ -1006,7 +1034,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                     setCurrentTrackIndex(i);
                                     setIsPlaying(true);
                                 }}
-                                className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all group ${i === currentTrackIndex
+                                className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all group shrink-0 ${i === currentTrackIndex
                                     ? 'bg-pink-500/10 border border-pink-500/20'
                                     : 'hover:bg-white/5 border border-transparent'
                                     }`}
@@ -1034,10 +1062,52 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                         {track.title}
                                     </div>
                                 </div>
+                                {/* Duration */}
+                                <div className="text-xs font-mono text-zinc-500">
+                                    {track.duration ? formatTime(track.duration) : ""}
+                                </div>
                             </button>
                         ))}
                     </div>
                 </div>
+
+                {/* 🎧 Recommendations (Up Next) */}
+                {recommendations.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                        <h3 className="font-bold text-sm text-zinc-400 px-1">Up Next</h3>
+                        <div className="flex flex-col gap-2">
+                            {recommendations.map((rec) => (
+                                <Link key={rec.id} href={`/audio/${rec.id}`} className="flex gap-3 group p-2 rounded-xl hover:bg-white/5 transition-colors bg-zinc-900/30 border border-transparent hover:border-zinc-800">
+                                    {/* Thumb */}
+                                    <div className="w-24 aspect-video bg-zinc-900 rounded-lg overflow-hidden relative shrink-0">
+                                        {rec.thumbnail ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={rec.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-zinc-700">
+                                                <Music2 size={16} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Info */}
+                                    <div className="flex flex-col gap-1 min-w-0 justify-center">
+                                        <h4 className="font-bold text-sm leading-tight line-clamp-2 text-zinc-200 group-hover:text-pink-400 transition-colors">
+                                            {rec.title}
+                                        </h4>
+                                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                            <div className="flex items-center gap-1">
+                                                <span className="">👁️</span>
+                                                {rec.viewCount}
+                                            </div>
+                                            <span>•</span>
+                                            <span>{rec.duration ? formatTime(rec.duration) : "--:--"}</span>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <audio
@@ -1051,6 +1121,6 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                     50% { height: 100%; }
                 }
              `}</style>
-        </div>
+        </div >
     );
 }
