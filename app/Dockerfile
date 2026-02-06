@@ -53,7 +53,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 RUN mkdir -p /app/db /app/library && chown nextjs:nodejs /app/db /app/library
 
 # Install Prisma CLI for production migrations
-RUN npm install prisma@5.22.0
+RUN npm install -g prisma@5.22.0
 
 USER nextjs
 
