@@ -16,6 +16,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# 🔥 Remove any existing .next folder to prevent Turbopack cache pollution!
+RUN rm -rf .next
+
 # Generate Prisma Client
 RUN npx prisma generate
 
