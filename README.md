@@ -12,14 +12,15 @@ Ultimate Media Universe (UMU) is a next-generation, self-hosted media cataloging
 Access all media types through a "Unified Card" interface using Glassmorphism design principles. Dark mode is enabled by default to reduce eye strain during long "observation" sessions.
 
 ### 🪐 Planetary Core (Media Support)
-- **Video Module (Available):** Standard video playback with seekbar preview and theater mode.
-- **Manga Reader (Available):** Advanced Hybrid Reader supporting both "Scroll" (Webtoon) and "Spread" (Book) modes for optimal viewing of comic sequences.
-- **Image Gallery:** *[Coming Soon]* - Full-feature image viewer and tagging system.
-- **Audio Module:** *[Coming Soon]* - Planned support for background playback and visualization.
+- **Video Module:** Advanced video playback with seekbar preview, loop controls, and theater mode.
+- **Manga Reader:** Hybrid Reader supporting "Scroll" (Webtoon), "Spread" (Book), and "Single Page" modes with RTL support and markers.
+- **Image Gallery:** Batch-enabled gallery for organizing large image collections with tags.
+- **Audio Module:** Dedicated player with playlist support and file metadata integration.
+- **Hyperlink Archive:** Manage bookmarks and external resources within the same universe.
 
 ### 🛰️ Exploration Rover (Scanner & AI)
-- **Auto-Indexing:** The system (codenamed "Core System") automatically scans your library folder and generates optimized thumbnails.
-- **AI Suggestions:** *[Experimental]* - Currently provides randomized content discovery. Intelligent recommendation based on usage patterns is in development.
+- **Auto-Indexing:** The system automatically scans your library folder and generates optimized thumbnails via FFmpeg/Sharp.
+- **Smart Search:** Filter content by tags, text query, or metadata properties.
 
 ### 🛡️ Black Hole Storage (Privacy)
 All data remains local on your filesystem (`/library` directory). No cloud uploads, no telemetry. Your universe belongs only to you.
@@ -29,34 +30,53 @@ All data remains local on your filesystem (`/library` directory). No cloud uploa
 - **Styling:** Tailwind CSS
 - **Database:** SQLite (Prisma)
 - **State:** Zustand
+- **Containerization:** Docker & Docker Compose
 
-## 🏁 Getting Started
+## 🐳 Deployment (Docker / Raspberry Pi)
+
+This system is optimized for containerized environments, including ARM64 devices like Raspberry Pi.
+
+1.  **Prepare your media:**
+    Organize your files on your host machine (e.g., external SSD).
+    ```
+    /mnt/ssd/media
+      ├── videos
+      ├── manga
+      └── audio
+    ```
+
+2.  **Configure `docker-compose.yml`:**
+    Point the volumes to your actual media paths.
+    ```yaml
+    volumes:
+      - /mnt/ssd/media:/app/library
+    ```
+
+3.  **Launch the Universe:**
+    ```bash
+    docker-compose up -d --build
+    ```
+
+4.  **Access:**
+    Open `http://<your-server-ip>:3000`.
+
+## 🏁 Development Setup
 
 1.  **Clone the Universe:**
     ```bash
     git clone https://github.com/your-username/ultimate-media-universe.git
-    cd ultimate-media-universe
+    cd ultimate-media-universe/app
     ```
 
-2.  **Enter the Application Core:**
-    ```bash
-    cd app
-    ```
-
-3.  **Initialize Dark Matter (Dependencies):**
+2.  **Install Dark Matter (Dependencies):**
     ```bash
     npm install
-    # or
-    yarn
     ```
 
-4.  **Ignite the Big Bang (Dev Server):**
+3.  **Ignite the Big Bang (Dev Server):**
     ```bash
     npm run dev
     ```
-
-5.  **Observe:**
-    Open [http://localhost:3000](http://localhost:3000) to view your universe.
 
 ## 🤝 Configuration
 
@@ -64,7 +84,7 @@ Create a `.env.local` file in the `app` directory to customize your experience:
 
 ```bash
 NEXT_PUBLIC_APP_NAME="Ultimate Media Universe"
-NEXT_PUBLIC_AI_NAME="Core System" # Or your preferred assistant name
+NEXT_PUBLIC_AI_NAME="Core System"
 ```
 
 ## 📜 License
