@@ -46,6 +46,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Explicitly copy Prisma Client
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy Prisma schema and migrations for runtime usage if needed (e.g. migrations)
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
