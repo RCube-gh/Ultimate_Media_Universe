@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   fapflix:
     container_name: fapflix-v2
@@ -12,6 +10,7 @@ services:
     environment:
       - DATABASE_URL=file:/app/db/dev.db
       - NEXT_PUBLIC_BASE_URL=http://localhost:3000
+      - PRISMA_CLI_BINARY_TARGETS=linux-musl-arm64-openssl-3.0.x
     volumes:
       # 💾 Database Persistence
       # (Host path : Container path)
