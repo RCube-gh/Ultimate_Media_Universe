@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  fapflix:
+    container_name: fapflix-v2
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=file:/app/db/dev.db
+      - NEXT_PUBLIC_BASE_URL=http://localhost:3000
+    volumes:
+      # 💾 Database Persistence
+      # (Host path : Container path)
+      - ./data/db:/app/db
+
+      # 📁 Media Library (Videos, Manga, Audio)
+      # CHANGE THIS to your actual media path on the Raspberry Pi / Host
+      # Example: - /mnt/hdd/Adult:/app/library
+      - ./library:/app/library
+
+      # 🖼️ Thumbnail Cache (Optional but recommended)
+      - ./data/cache:/app/.cache
+    # 🔧 Resource Limits (Optional for Pi 3/4)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 2G
+
+volumes:
+  # Named volumes if you prefer managed volumes over bind mounts
+  db_data:
