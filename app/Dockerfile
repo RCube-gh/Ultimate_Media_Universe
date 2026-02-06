@@ -52,6 +52,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 # We will mount volumes for these in docker-compose, but we need the directories to exist
 RUN mkdir -p /app/db /app/library && chown nextjs:nodejs /app/db /app/library
 
+# Install Prisma CLI for production migrations
+RUN npm install prisma@5.22.0
+
 USER nextjs
 
 EXPOSE 3000
