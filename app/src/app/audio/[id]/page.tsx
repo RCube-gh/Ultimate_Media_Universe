@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import AudioPlayer, { AudioTrack } from "@/components/AudioPlayer"; // This will be the updated Client Component
+import AudioPlayer, { AudioTrack } from "@/components/AudioPlayer";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { MediaInfo } from "@/components/MediaInfo";
 
 export const revalidate = 0;
 
@@ -15,6 +16,7 @@ export default async function AudioPage({ params }: PageProps) {
 
     const item = await prisma.mediaItem.findUnique({
         where: { id },
+        include: { tags: true, markers: true },
     });
 
     if (!item || item.type !== "AUDIO") {
@@ -24,11 +26,8 @@ export default async function AudioPage({ params }: PageProps) {
     // 🕵️‍♀️ Parse Metadata
     let tracks: AudioTrack[] = [];
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let coverUrl = item.thumbnail || undefined; // Keep for fallback logic
+    let coverUrl = item.thumbnail || undefined;
     let images: string[] = [];
-
-    // console.log("🔍 AudioPage Debug:", { id: item.id, filePath: item.filePath, metaType: typeof (item as any).metadata });
-    // console.log("🔍 Raw Meta:", (item as any).metadata);
 
     try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,8 +37,6 @@ export default async function AudioPage({ params }: PageProps) {
         if (hasMeta && item.filePath) {
             const meta = typeof rawMeta === 'string' ? JSON.parse(rawMeta) : rawMeta;
 
-            // Construct Base URL
-            // Strategy: Find relative path from "library" folder which serves as API root
             const normalizedPath = item.filePath.replaceAll('\\', '/');
 
             // Try different anchors to find the root
@@ -52,17 +49,13 @@ export default async function AudioPage({ params }: PageProps) {
                 // Fallback: Try "/uploads/"
                 const uploadIndex = normalizedPath.toLowerCase().lastIndexOf('/uploads/');
                 if (uploadIndex !== -1) {
-                    relativeRoot = "uploads" + normalizedPath.substring(uploadIndex + 8); // include uploads/ part
+                    relativeRoot = "uploads" + normalizedPath.substring(uploadIndex + 8);
                 } else {
-                    // Fallback: If path implies we are in a subfolder, just try to use the last segments
-                    // But for now, we assume standard structure failed. 
-                    // Let's try to assume the filePath IS the relative path? Unlikely.
                     console.warn("Could not determine relative root from path:", normalizedPath);
                 }
             }
 
             if (relativeRoot || libIndex !== -1) {
-                // Clean relative root leading slash
                 if (relativeRoot.startsWith('/')) relativeRoot = relativeRoot.substring(1);
 
                 if (Array.isArray(meta.tracks)) {
@@ -70,18 +63,12 @@ export default async function AudioPage({ params }: PageProps) {
                     tracks = meta.tracks.map((t: any) => {
                         let rawTitle = t.title || "";
 
-                        // If no title from DB/Scanner, derive from file path
                         if (!rawTitle) {
                             rawTitle = t.file.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, "") || "Unknown";
                         }
 
-                        // Common Cleanup (Apply to both ID3 and File-derived titles to be safe against "01. Title")
-                        // Replace _ and - with space
                         rawTitle = rawTitle.replace(/[_-]/g, " ");
-                        // Remove leading digits/dots (e.g. "01. ", "01 ", "1-")
-                        // Regex: Start with digits, optional dot/hyphen, then whitespace
                         rawTitle = rawTitle.replace(/^\d+[\.\-\s]+/, "");
-                        // Trim
                         rawTitle = rawTitle.trim();
 
                         return {
@@ -92,7 +79,6 @@ export default async function AudioPage({ params }: PageProps) {
                     });
                 }
 
-                // Parse Images
                 if (Array.isArray(meta.images)) {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     images = meta.images.map((img: any) =>
@@ -100,7 +86,6 @@ export default async function AudioPage({ params }: PageProps) {
                     );
                 }
 
-                // If no images found but thumbnail exists, use thumbnail
                 if (images.length === 0 && item.thumbnail) {
                     images.push(item.thumbnail);
                 }
@@ -110,14 +95,13 @@ export default async function AudioPage({ params }: PageProps) {
         console.error("Error parsing audio metadata:", e);
     }
 
-    // 🩹 Fallback for Single File Uploads (No Metadata or Failed Parse)
+    // 🩹 Fallback for Single File Uploads
     if (tracks.length === 0 && item.filePath) {
         const isZip = item.filePath.toLowerCase().endsWith(".zip");
-        // Check if it's already a public path (starts with /api or http) AND NOT A ZIP
         if ((item.filePath.startsWith("/") || item.filePath.startsWith("http")) && !isZip) {
             tracks.push({
                 url: item.filePath,
-                title: item.title, // Use Item Title for single file
+                title: item.title,
                 index: 0
             });
             if (item.thumbnail) images.push(item.thumbnail);
@@ -148,10 +132,7 @@ export default async function AudioPage({ params }: PageProps) {
     }
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-white overflow-y-auto custom-scrollbar">
-            {/* Note: We remove the fixed header to match VideoPage style more closely, or keep it if preferred. 
-                 VideoPage has no sticky header. Let's keep it clean. */}
-
+        <div className="min-h-screen bg-zinc-950 text-white overflow-y-auto custom-scrollbar pb-20">
             <AudioPlayer
                 id={item.id}
                 tracks={tracks}
@@ -162,7 +143,9 @@ export default async function AudioPage({ params }: PageProps) {
                 viewCount={item.viewCount}
                 rating={item.rating || 0}
                 isFavorite={item.isFavorite}
-            />
+            >
+                <MediaInfo item={item as any} />
+            </AudioPlayer>
         </div>
     );
 }

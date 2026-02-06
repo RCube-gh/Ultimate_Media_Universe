@@ -6,11 +6,29 @@ import { formatDistanceToNow } from "date-fns";
 // Always fetch fresh data
 export const revalidate = 0;
 
-export default async function MangaCatalogPage() {
-    // 📚 Fetch ONLY Manga items
+
+interface Props {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function MangaCatalogPage({ searchParams }: Props) {
+    const { q } = await searchParams;
+    const query = typeof q === 'string' ? q : undefined;
+
+    const where: any = { type: "MANGA" };
+    if (query) {
+        where.OR = [
+            { title: { contains: query } },
+            { description: { contains: query } },
+            { tags: { some: { name: { contains: query } } } }
+        ];
+    }
+
+    // 📚 Fetch ONLY Manga items with Search
     const mangas = await prisma.mediaItem.findMany({
-        where: { type: "MANGA" },
+        where,
         orderBy: { createdAt: "desc" },
+        include: { tags: true }
     });
 
     return (

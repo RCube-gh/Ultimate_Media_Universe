@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Calendar, Clock, Share2, List, Play } from "lucide-react";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { VideoActions } from "@/components/VideoActions";
-import { MarkerStats } from "@/components/MarkerStats";
+import { MediaInfo } from "@/components/MediaInfo";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Props = {
@@ -18,7 +17,7 @@ export default async function VideoPlayerPage(props: Props) {
     // 1️⃣ Fetch current video
     const item = await prisma.mediaItem.findUnique({
         where: { id },
-        include: { markers: true },
+        include: { markers: true, tags: true },
     });
 
     if (!item) return notFound();
@@ -64,34 +63,7 @@ export default async function VideoPlayerPage(props: Props) {
                     </div>
 
                     {/* 📝 Metadata Block */}
-                    <div className="space-y-4">
-                        <h1 className="text-2xl font-bold leading-tight line-clamp-2">{item.title}</h1>
-
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            {/* Stats */}
-                            <div className="flex items-center gap-2 text-sm text-zinc-400">
-                                <span className="text-white font-bold">{item.viewCount.toLocaleString()} views</span>
-                                <span>•</span>
-                                <span>{new Date(item.createdAt).toLocaleDateString()}</span>
-                                <MarkerStats id={id} />
-                            </div>
-
-                            {/* Actions Toolbar */}
-                            <VideoActions
-                                id={id}
-                                initialLikes={item.rating || 0}
-                                initialIsFavorite={item.isFavorite}
-                            />
-                        </div>
-
-                        {/* Description Box */}
-                        <div className="bg-zinc-900/50 rounded-xl p-4 text-sm text-zinc-300 whitespace-pre-wrap hover:bg-zinc-900 transition-colors cursor-pointer">
-                            <div className="flex gap-2 font-bold mb-2">
-                                <span>{item.duration ? `${Math.floor(item.duration / 60)} min` : "Unknown duration"}</span>
-                            </div>
-                            {item.description || "No description provided."}
-                        </div>
-                    </div>
+                    <MediaInfo item={item as any} />
 
                 </div>
 

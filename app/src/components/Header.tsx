@@ -2,6 +2,7 @@
 
 import { Search, Menu, Heart, Bell, User } from "lucide-react";
 import Link from "next/link";
+import { SearchBar } from "./SearchBar";
 
 interface HeaderProps {
     onMenuClick: () => void;
@@ -32,16 +33,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
             {/* Center: Search Bar */}
             <div className="flex-1 max-w-2xl mx-4">
-                <div className="relative group">
-                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                        <Search size={18} className="text-zinc-500 group-focus-within:text-pink-500 transition-colors" />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Search your fetish..."
-                        className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-full py-2.5 pl-10 pr-4 focus:outline-none focus:border-pink-500/50 focus:bg-black transition-all placeholder:text-zinc-600"
-                    />
-                </div>
+                <SearchBar />
             </div>
 
             {/* Right: Actions & User */}

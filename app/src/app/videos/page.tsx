@@ -4,11 +4,29 @@ import { Play, Film } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function VideosPage() {
+type Props = {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function VideosPage({ searchParams }: Props) {
+    const { q } = await searchParams;
+    const query = typeof q === 'string' ? q : undefined;
+
+    const where: any = { type: "VIDEO" };
+
+    if (query) {
+        where.OR = [
+            { title: { contains: query } },
+            { description: { contains: query } },
+            { tags: { some: { name: { contains: query } } } }
+        ];
+    }
+
     // 🎥 ビデオだけ取得！
     const videos = await prisma.mediaItem.findMany({
-        where: { type: "VIDEO" },
+        where,
         orderBy: { createdAt: "desc" },
+        include: { tags: true },
     });
 
     return (
@@ -26,7 +44,7 @@ export default async function VideosPage() {
             </header>
 
             {videos.length === 0 ? (
-                <EmptyState />
+                <EmptyState query={query} />
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {videos.map((item) => (
@@ -37,6 +55,8 @@ export default async function VideosPage() {
         </div>
     );
 }
+
+
 
 function VideoCard({ item }: { item: any }) {
     return (
@@ -74,6 +94,13 @@ function VideoCard({ item }: { item: any }) {
 
             {/* 📝 Info Area */}
             <div className="p-4 bg-zinc-900 flex flex-col gap-1">
+                <div className="flex flex-wrap gap-1 mb-1">
+                    {item.tags?.map((tag: any) => (
+                        <span key={tag.id} className="text-[10px] text-pink-300 bg-pink-500/10 px-1.5 py-0.5 rounded border border-pink-500/10">
+                            #{tag.name}
+                        </span>
+                    ))}
+                </div>
                 <h3 className="font-bold text-white text-lg line-clamp-1 group-hover:text-pink-400 transition-colors">
                     {item.title}
                 </h3>
@@ -92,17 +119,21 @@ function VideoCard({ item }: { item: any }) {
     );
 }
 
-function EmptyState() {
+function EmptyState({ query }: { query?: string }) {
     return (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-600 border border-dashed border-zinc-800 rounded-3xl bg-zinc-900/20">
             <Film size={64} className="opacity-20 mb-4" />
-            <p className="text-xl font-medium">No Videos yet.</p>
-            <Link
-                href="/upload"
-                className="mt-6 px-6 py-2 bg-zinc-800 hover:bg-pink-600 hover:text-white text-zinc-300 rounded-full font-medium transition-colors"
-            >
-                Add Video
-            </Link>
+            <p className="text-xl font-medium">
+                {query ? `No videos matching "${query}" found.` : "No Videos yet."}
+            </p>
+            {!query && (
+                <Link
+                    href="/upload"
+                    className="mt-6 px-6 py-2 bg-zinc-800 hover:bg-pink-600 hover:text-white text-zinc-300 rounded-full font-medium transition-colors"
+                >
+                    Add Video
+                </Link>
+            )}
         </div>
     );
 }

@@ -88,6 +88,23 @@ export async function POST(req: NextRequest) {
         let isArchived = false;
         let duration: number | null = null;
 
+        // Parse Tags
+        const tagsJson = formData.get("tags") as string;
+        let tagData: any = undefined;
+        if (tagsJson) {
+            try {
+                const tagsList = JSON.parse(tagsJson);
+                if (Array.isArray(tagsList)) {
+                    tagData = {
+                        connectOrCreate: tagsList.map((tagName: string) => ({
+                            where: { name: tagName },
+                            create: { name: tagName },
+                        })),
+                    };
+                }
+            } catch (e) { console.error("Failed to parse tags", e); }
+        }
+
         // 1️⃣ Process Thumbnail
         if (thumbnailFile && thumbnailFile.size > 0 && thumbnailFile.name !== "undefined") {
             try {
@@ -105,10 +122,10 @@ export async function POST(req: NextRequest) {
         }
 
         // 2️⃣ Process Main Content
-        // 2️⃣ Process Main Content
         const isZip = mainFile && mainFile.name.toLowerCase().endsWith(".zip");
         const isZipTarget = (type === "MANGA" || type === "AUDIO");
 
+        // 2️⃣ Process Main Content (ZIPs)
         if (isZipTarget && isZip) {
             const uploadedFile = mainFile;
             if (uploadedFile && uploadedFile.size > 0) {
@@ -180,10 +197,16 @@ export async function POST(req: NextRequest) {
                         itemId = await scanAudioFolder(itemDir, finalTitle, trackTitles);
                     }
 
-                    if (sourceUrl) {
+                    // Update with URL, Description AND TAGS
+                    const updateData: any = {};
+                    if (sourceUrl) updateData.url = sourceUrl;
+                    if (description) updateData.description = description;
+                    if (tagData) updateData.tags = tagData; // Add Tags!
+
+                    if (Object.keys(updateData).length > 0) {
                         await prisma.mediaItem.update({
                             where: { id: itemId },
-                            data: { url: sourceUrl, description: description }
+                            data: updateData
                         });
                     }
 
@@ -201,8 +224,8 @@ export async function POST(req: NextRequest) {
             } else {
                 return NextResponse.json({ success: false, message: "No ZIP file provided." }, { status: 400 });
             }
-
-        } else if (mainFile && mainFile.size > 0 && mainFile.name !== "undefined") {
+        }
+        else if (mainFile && mainFile.size > 0 && mainFile.name !== "undefined") {
             // Processing Single File (Video, Image, or Single Audio)
             // If try to upload ZIP for Video/Link, it falls here (treated as file)
             // If Single Audio (not zip), it falls here.
@@ -223,21 +246,12 @@ export async function POST(req: NextRequest) {
 
                 if (duration) {
                     // 🎞️ Trigger Sprite Gen
-                    // Construct consistent cache path: /library/.cache/thumbnails/[hash]_sprite.jpg
                     try {
-                        // Use MD5 of the filePath (relative or absolute? Scanner uses absolute scan path usually, but here we have absolute savePath)
-                        // To be safe and consistent with route.ts logic which allows hashed access:
-                        // The file route uses: crypto.createHash("md5").update(fullPath).digest("hex");
                         const { createHash } = await import("crypto");
                         const hash = createHash("md5").update(savePath).digest("hex");
 
                         const spriteName = `${hash}_sprite.jpg`;
-                        const spritePath = join(thumbDir, spriteName); // thumbDir is already .cache/thumbnails or similar in other contexts? 
-
-                        // Wait! thumbDir in this file is defined as `join(libraryDir, "thumbnails")` which is `library/thumbnails`.
-                        // BUT route.ts (the file server) looks in `.cache/thumbnails` relative to app root?
-                        // Let's check `route.ts`. It uses: CACHE_ROOT = path.join(PROCESS_ROOT, ".cache", "thumbnails");
-                        // We must match that location!
+                        // ThumbDir is defined above
 
                         const PROCESS_ROOT = process.cwd();
                         const CACHE_ROOT = join(PROCESS_ROOT, ".cache", "thumbnails");
@@ -256,7 +270,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // DB Create for Non-Manga
+        // DB Create for Non-Manga (Single File)
         if (type !== "MANGA") {
             const newItem = await prisma.mediaItem.create({
                 data: {
@@ -269,6 +283,7 @@ export async function POST(req: NextRequest) {
                     thumbnail: thumbnailPath,
                     size: mainFile ? BigInt(mainFile.size) : null,
                     duration,
+                    tags: tagData, // Add Tags!
                 },
             });
             console.log("✅ Success! Item ID:", newItem.id);

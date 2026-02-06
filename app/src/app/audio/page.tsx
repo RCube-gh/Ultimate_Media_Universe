@@ -6,11 +6,29 @@ import { formatDistanceToNow } from "date-fns";
 // Always fetch fresh data
 export const revalidate = 0;
 
-export default async function AudioCatalogPage() {
-    // 🎧 Fetch ONLY Audio items
+
+interface Props {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function AudioCatalogPage({ searchParams }: Props) {
+    const { q } = await searchParams;
+    const query = typeof q === 'string' ? q : undefined;
+
+    const where: any = { type: "AUDIO" };
+    if (query) {
+        where.OR = [
+            { title: { contains: query } },
+            { description: { contains: query } },
+            { tags: { some: { name: { contains: query } } } }
+        ];
+    }
+
+    // 🎧 Fetch ONLY Audio items with Search
     const audios = await prisma.mediaItem.findMany({
-        where: { type: "AUDIO" },
+        where,
         orderBy: { createdAt: "desc" },
+        include: { tags: true }
     });
 
     return (

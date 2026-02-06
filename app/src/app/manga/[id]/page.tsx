@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import MangaReader from "@/components/MangaReader";
-import { MangaDetailsActions } from "@/components/MangaDetailsActions";
-import { MarkerStats } from "@/components/MarkerStats";
+import { MediaInfo } from "@/components/MediaInfo";
 
 // No caching for reader to ensure fresh access
 export const revalidate = 0;
@@ -16,6 +15,7 @@ export default async function MangaReaderPage({ params }: PageProps) {
 
     const item = await prisma.mediaItem.findUnique({
         where: { id },
+        include: { tags: true },
     });
 
     if (!item || item.type !== "MANGA") {
@@ -92,33 +92,9 @@ export default async function MangaReaderPage({ params }: PageProps) {
                         />
                     </div>
 
-                    {/* Metadata */}
-                    <div className="space-y-4 px-2">
-                        <h1 className="text-3xl font-bold leading-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-zinc-400">
-                            {item.title}
-                        </h1>
-
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-                            <div className="flex items-center gap-3 text-sm text-zinc-400">
-                                <span className="px-2 py-1 bg-zinc-800 rounded text-xs font-mono">{pages.length} Pages</span>
-                                <span>•</span>
-                                <span>{new Date(item.createdAt).toLocaleDateString()}</span>
-                                <MarkerStats id={item.id} />
-                            </div>
-
-                            {/* Actions */}
-                            {/* Actions */}
-                            <MangaDetailsActions
-                                id={item.id}
-                                initialLikes={item.rating || 0}
-                                initialIsFavorite={item.isFavorite}
-                            />
-                        </div>
-
-                        {/* Description */}
-                        <div className="bg-zinc-900/30 rounded-xl p-4 text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">
-                            {item.description || "No description provided."}
-                        </div>
+                    {/* Metadata Section - Replaced with MediaInfo for Editing Capability */}
+                    <div className="px-2">
+                        <MediaInfo item={item as any} />
                     </div>
                 </div>
 

@@ -1,11 +1,21 @@
 "use client";
 
+
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ListMusic, Music2, Share2, Clock, Calendar, Maximize, Minimize, Settings as SettingsIcon, X, ChevronLeft, Disc, Image as ImageIcon } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, ListMusic, Music2, Share2, Clock, Calendar, Maximize, Minimize, Settings as SettingsIcon, X, ChevronLeft, Disc, Image as ImageIcon, MapPin } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { useSettings } from "@/hooks/useSettings";
+import { VideoActions } from "@/components/VideoActions";
 
-import { VideoActions } from "@/components/VideoActions"; // Import added
+type Marker = {
+    id: string;
+    time: number;
+    label: string;
+    icon: string;
+};
+
+
 
 export type AudioTrack = {
     url: string;
@@ -24,9 +34,10 @@ interface AudioPlayerProps {
     viewCount: number;
     rating: number;
     isFavorite: boolean;
+    children?: React.ReactNode;
 }
 
-export default function AudioPlayer({ id, tracks, images = [], title, description, createdAt, viewCount, rating, isFavorite }: AudioPlayerProps) {
+export default function AudioPlayer({ id, tracks, images = [], title, description, createdAt, viewCount, rating, isFavorite, children }: AudioPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -36,6 +47,8 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     const [volume, setVolume] = useState(1);
     const [isMuted, setIsMuted] = useState(false);
     const [isLoop, setIsLoop] = useState(false);
+    const [loopStart, setLoopStart] = useState<number | null>(null);
+    const [loopEnd, setLoopEnd] = useState<number | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showControls, setShowControls] = useState(true);
     const [playbackRate, setPlaybackRate] = useState(1);
@@ -50,6 +63,131 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     // Interaction State
     const [isDragging, setIsDragging] = useState(false);
     const controlsTimeoutRef = useRef<NodeJS.Timeout>(null);
+
+    // ✨ Overlay Feedback State
+    const [feedbackState, setFeedbackState] = useState<{ content: React.ReactNode, mode?: "default" | "fullscreen", isExiting?: boolean } | null>(null);
+    const feedbackTimeoutRef = useRef<NodeJS.Timeout>(null);
+
+    const triggerFeedback = useCallback((content: React.ReactNode, options?: { duration?: number, mode?: "default" | "fullscreen" }) => {
+        // 1. Reset
+        setFeedbackState({ content, mode: options?.mode || "default", isExiting: false });
+        if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+
+        // 2. Schedule Exit (Fade Out)
+        const totalDuration = options?.duration || 800;
+        const exitDuration = 500;
+        const visibleDuration = Math.max(totalDuration - exitDuration, 0);
+
+        feedbackTimeoutRef.current = setTimeout(() => {
+            setFeedbackState(prev => prev ? { ...prev, isExiting: true } : null);
+            feedbackTimeoutRef.current = setTimeout(() => {
+                setFeedbackState(null);
+            }, exitDuration);
+        }, visibleDuration);
+    }, []);
+
+    const showMarkerFeedback = useCallback((icon: string, label: string, isExplicitAction: boolean = false) => {
+        // Always usage Splash for the Quick Button (Explicit Action)
+        if (isExplicitAction) {
+            // 💦 SPLASH MODE
+            triggerFeedback(
+                <div className="relative flex items-center justify-center w-full h-full overflow-hidden bg-black/20 backdrop-blur-[2px]">
+                    {/* Ripple 1 */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-[10px] h-[10px] bg-blue-500 rounded-full"
+                            style={{
+                                animation: 'audio-ripple 3s cubic-bezier(0, 0, 0.2, 1) forwards',
+                            }}
+                        />
+                        <style>{`
+                            @keyframes audio-ripple {
+                                0% { transform: scale(1); opacity: 0.8; }
+                                100% { transform: scale(300); opacity: 0; }
+                            }
+                         `}</style>
+                    </div>
+
+                    {/* Ripple 2 (Delayed) */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div
+                            className="absolute bg-cyan-400/30 rounded-full"
+                            style={{
+                                width: '10px', height: '10px',
+                                animation: 'audio-ripple 3s cubic-bezier(0, 0, 0.2, 1) 0.2s forwards',
+                            }}
+                        />
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center animate-in zoom-in-50 duration-500">
+                        <span className="text-8xl filter drop-shadow-[0_0_25px_rgba(59,130,246,1)] animate-bounce">{icon}</span>
+                        <span className="text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-blue-400 mt-4 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] animate-pulse">SPLASH!</span>
+                    </div>
+                </div>,
+                { duration: 3050, mode: "fullscreen" }
+            );
+        } else {
+            // ✨ STANDARD HIGHLIGHT MODE
+            triggerFeedback(
+                <div className="flex flex-col items-center animate-in slide-in-from-bottom-4 duration-1000 bg-black/60 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-2xl">
+                    <span className="text-6xl drop-shadow-lg animate-[pulse_1s_ease-in-out_infinite] mb-2">{icon}</span>
+                    <span className="text-xl font-bold text-white tracking-wider">
+                        {label || "Saved"}
+                    </span>
+                </div>,
+                { duration: 2500 }
+            );
+        }
+    }, [triggerFeedback]);
+
+    // 📍 Markers State
+    const { settings } = useSettings();
+    const [markers, setMarkers] = useState<Marker[]>([]);
+    const [isMarkerModalOpen, setIsMarkerModalOpen] = useState(false);
+    const [markerLabel, setMarkerLabel] = useState("");
+    const [markerIcon, setMarkerIcon] = useState("💦");
+
+    // 🧬 Fetch Markers
+    useEffect(() => {
+        if (!id) return;
+        fetch(`/api/media/${id}/markers`)
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) setMarkers(data);
+            })
+            .catch(err => console.error("Failed to load markers", err));
+    }, [id]);
+
+    // 💾 Save Marker
+    const saveMarker = async () => {
+        if (!audioRef.current || !id) return;
+        const time = audioRef.current.currentTime;
+        try {
+            const res = await fetch(`/api/media/${id}/markers`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ time, label: markerLabel, icon: markerIcon }),
+            });
+            if (res.ok) {
+                const saved = await res.json();
+                setMarkers(prev => [...prev, saved].sort((a, b) => a.time - b.time));
+                setIsMarkerModalOpen(false);
+                setMarkerLabel("");
+                setMarkerIcon("💦"); // Reset but keep user pref ideally, but hard to obtain sync without settings hook full usage
+
+                // 🔥 Trigger Feedback
+                showMarkerFeedback(markerIcon, markerLabel, false);
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    // 🗑️ Delete Marker
+    const deleteMarker = async (markerId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setMarkers(prev => prev.filter(m => m.id !== markerId));
+        try {
+            await fetch(`/api/markers/${markerId}`, { method: "DELETE" });
+        } catch (e) { console.error(e); }
+    };
 
     const currentTrack = tracks[currentTrackIndex];
 
@@ -68,24 +206,109 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     };
 
     // Auto Play Next
-    const handleEnded = () => {
-        if (isLoop) {
-            audioRef.current?.play();
-        } else if (currentTrackIndex < tracks.length - 1) {
-            setCurrentTrackIndex(prev => prev + 1);
-        } else {
-            setIsPlaying(false);
-        }
-    };
 
-    // Effect: Play when track changes
+
+    // ⚡ Quick Action Listener (from VideoActions)
     useEffect(() => {
-        if (audioRef.current) {
-            if (isPlaying) {
-                audioRef.current.play().catch(console.error);
+        const handleAction = (e: Event) => {
+            const detail = (e as CustomEvent).detail; // { label, icon }
+            const audio = audioRef.current;
+            if (!audio || !id) return;
+
+            const time = audio.currentTime;
+
+            // 1. Save Marker
+            fetch(`/api/media/${id}/markers`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    time,
+                    label: detail.label,
+                    icon: detail.icon
+                })
+            }).then(res => res.json()).then(saved => {
+                setMarkers(prev => [...prev, saved].sort((a, b) => a.time - b.time));
+            });
+
+            // 2. Visual Feedback
+            showMarkerFeedback(detail.icon, detail.label, true);
+        };
+
+        window.addEventListener("fapflix-trigger-action", handleAction);
+        return () => window.removeEventListener("fapflix-trigger-action", handleAction);
+    }, [id, showMarkerFeedback]);
+
+    // 🎧 Event Listeners (Robust Duration & Time)
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const updateTime = () => {
+            if (!isDragging) {
+                const t = audio.currentTime;
+                // 🔁 Loop Check
+                if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
+                    if (t >= loopEnd) {
+                        audio.currentTime = loopStart;
+                        setCurrentTime(loopStart);
+                        return;
+                    }
+                }
+                setCurrentTime(t);
             }
+        };
+        const updateDuration = () => {
+            // 0 or Infinity check
+            if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
+                setDuration(audio.duration);
+            }
+        };
+        const onPlay = () => setIsPlaying(true);
+        const onPause = () => setIsPlaying(false);
+        const onEnded = () => {
+            // AB Loop shouldn't hit ended technically if set correctly, but if loopEnd is end of track...
+            if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
+                audio.currentTime = loopStart;
+                audio.play();
+                return;
+            }
+
+            if (isLoop) {
+                audio.currentTime = 0;
+                audio.play();
+            } else if (currentTrackIndex < tracks.length - 1) {
+                setCurrentTrackIndex(prev => prev + 1);
+            } else {
+                setIsPlaying(false);
+            }
+        };
+
+        audio.addEventListener('timeupdate', updateTime);
+        audio.addEventListener('loadedmetadata', updateDuration);
+        audio.addEventListener('durationchange', updateDuration);
+        audio.addEventListener('play', onPlay);
+        audio.addEventListener('pause', onPause);
+        audio.addEventListener('ended', onEnded);
+
+        // 🚀 Critical Initial Check
+        if (audio.readyState >= 1) {
+            updateDuration();
         }
-    }, [currentTrackIndex]);
+
+        // Auto-play logic handled here strictly
+        if (isPlaying) {
+            audio.play().catch(() => setIsPlaying(false));
+        }
+
+        return () => {
+            audio.removeEventListener('timeupdate', updateTime);
+            audio.removeEventListener('loadedmetadata', updateDuration);
+            audio.removeEventListener('durationchange', updateDuration);
+            audio.removeEventListener('play', onPlay);
+            audio.removeEventListener('pause', onPause);
+            audio.removeEventListener('ended', onEnded);
+        };
+    }, [currentTrackIndex, isDragging, isLoop, tracks.length, loopStart, loopEnd]); // Re-run when track changes to re-attach and check readyState
 
     const formatTime = (s: number) => {
         if (isNaN(s)) return "0:00";
@@ -132,17 +355,30 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         }
     }, [isDragging]);
 
+
+
+    // 🎮 Core Logic (Hoisted for Keyboard)
     const togglePlay = useCallback(() => {
         const audio = audioRef.current;
         if (!audio) return;
         if (audio.paused) {
             audio.play();
             setIsPlaying(true);
+            triggerFeedback(
+                <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                    <Play size={48} fill="currentColor" />
+                </div>
+            );
         } else {
             audio.pause();
             setIsPlaying(false);
+            triggerFeedback(
+                <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                    <Pause size={48} fill="currentColor" />
+                </div>
+            );
         }
-    }, []);
+    }, [triggerFeedback]);
 
     const toggleMute = useCallback(() => {
         const audio = audioRef.current;
@@ -150,7 +386,195 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         const nextMuted = !audio.muted;
         audio.muted = nextMuted;
         setIsMuted(nextMuted);
+        triggerFeedback(
+            <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                {nextMuted ? <VolumeX size={48} /> : <Volume2 size={48} />}
+            </div>
+        );
+    }, [triggerFeedback]);
+
+    const toggleFullscreen = useCallback(() => {
+        if (!document.fullscreenElement && containerRef.current) {
+            containerRef.current.requestFullscreen().catch(console.error);
+            setIsFullscreen(true);
+        } else if (document.exitFullscreen) {
+            document.exitFullscreen().catch(console.error);
+            setIsFullscreen(false);
+        }
     }, []);
+
+    // 🎹 Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const activeEl = document.activeElement as HTMLElement;
+            const isInput = activeEl?.tagName.toLowerCase() === 'input';
+            const isTextArea = activeEl?.tagName.toLowerCase() === 'textarea';
+
+            if (isTextArea) return;
+            if (isInput) {
+                const inputType = (activeEl as HTMLInputElement).type;
+                if (['text', 'password', 'email', 'search', 'number', 'url'].includes(inputType)) {
+                    return;
+                }
+            }
+
+            const audio = audioRef.current;
+            if (!audio) return;
+
+            // Show controls on any valid interaction
+            showControlsTemporarily();
+
+            switch (e.key.toLowerCase()) {
+                case ' ':
+                case 'k':
+                    e.preventDefault();
+                    if (audio.paused) {
+                        audio.play();
+                        setIsPlaying(true);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                                <Play size={48} fill="currentColor" />
+                            </div>
+                        );
+                    } else {
+                        audio.pause();
+                        setIsPlaying(false);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                                <Pause size={48} fill="currentColor" />
+                            </div>
+                        );
+                    }
+                    break;
+                case 'f':
+                    e.preventDefault();
+                    toggleFullscreen();
+                    break;
+                case 'm':
+                    // Mute
+                    e.preventDefault();
+                    toggleMute();
+                    break;
+                case 'escape':
+                    if (isMarkerModalOpen) {
+                        e.preventDefault();
+                        setIsMarkerModalOpen(false);
+                    }
+                    break;
+                case 'p':
+                    // Toggle Marker Modal
+                    e.preventDefault();
+                    if (isMarkerModalOpen) {
+                        setIsMarkerModalOpen(false);
+                    } else {
+                        setIsMarkerModalOpen(true);
+                        setMarkerLabel("");
+                    }
+                    break;
+                case 'a':
+                    // Set Loop Start
+                    if (audio) {
+                        setLoopStart(audio.currentTime);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                                <span className="text-4xl font-bold">A</span>
+                                <span className="text-sm text-zinc-200 mt-2">Loop Start</span>
+                            </div>
+                        );
+                    }
+                    break;
+                case 'b':
+                    // Set Loop End
+                    if (audio) {
+                        setLoopEnd(audio.currentTime);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                                <span className="text-4xl font-bold">B</span>
+                                <span className="text-sm text-zinc-200 mt-2">Loop End</span>
+                            </div>
+                        );
+                    }
+                    break;
+                case '\\':
+                case 'delete':
+                case 'backspace':
+                case 'c':
+                    // Clear Loop
+                    if (loopStart !== null || loopEnd !== null) {
+                        setLoopStart(null);
+                        setLoopEnd(null);
+                        triggerFeedback(
+                            <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                                <span className="text-4xl font-bold">🗑️</span>
+                                <span className="text-sm text-zinc-200 mt-2">Loop Cleared</span>
+                            </div>
+                        );
+                    }
+                    break;
+                case 'arrowleft':
+                    e.preventDefault();
+                    audio.currentTime = Math.max(0, audio.currentTime - 5);
+                    triggerFeedback(
+                        <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                            <SkipBack size={48} />
+                            <span className="text-sm font-bold mt-2">-5s</span>
+                        </div>
+                    );
+                    break;
+                case 'arrowright':
+                    e.preventDefault();
+                    audio.currentTime = Math.min(duration || 10000, audio.currentTime + 5);
+                    triggerFeedback(
+                        <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                            <SkipForward size={48} />
+                            <span className="text-sm font-bold mt-2">+5s</span>
+                        </div>
+                    );
+                    break;
+                case 'j':
+                    e.preventDefault();
+                    audio.currentTime = Math.max(0, audio.currentTime - 10);
+                    triggerFeedback(
+                        <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                            <SkipBack size={48} />
+                            <span className="text-sm font-bold mt-2">-10s</span>
+                        </div>
+                    );
+                    break;
+                case 'l':
+                    e.preventDefault();
+                    audio.currentTime = Math.min(duration || 10000, audio.currentTime + 10);
+                    triggerFeedback(
+                        <div className="flex flex-col items-center bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in fade-in duration-200">
+                            <SkipForward size={48} />
+                            <span className="text-sm font-bold mt-2">+10s</span>
+                        </div>
+                    );
+                    break;
+                case 'arrowup':
+                    e.preventDefault();
+                    setVolume(v => {
+                        const next = Math.min(1, v + 0.1);
+                        if (audio) audio.volume = next;
+                        return next;
+                    });
+                    break;
+                case 'arrowdown':
+                    e.preventDefault();
+                    setVolume(v => {
+                        const next = Math.max(0, v - 0.1);
+                        if (audio) audio.volume = next;
+                        return next;
+                    });
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [togglePlay, toggleMute, toggleFullscreen, isMarkerModalOpen, duration, showControlsTemporarily, loopStart, loopEnd, triggerFeedback]);
 
     const changeSpeed = useCallback((delta?: number, exact?: number) => {
         const audio = audioRef.current;
@@ -167,16 +591,6 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         audio.playbackRate = newRate;
         setPlaybackRate(newRate);
         setShowSpeedMenu(false);
-    }, []);
-
-    const toggleFullscreen = useCallback(() => {
-        if (!document.fullscreenElement && containerRef.current) {
-            containerRef.current.requestFullscreen().catch(console.error);
-            setIsFullscreen(true);
-        } else if (document.exitFullscreen) {
-            document.exitFullscreen().catch(console.error);
-            setIsFullscreen(false);
-        }
     }, []);
 
     useEffect(() => {
@@ -251,6 +665,64 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                         )}
                     </div>
 
+                    {/* ✨ FEEDBACK OVERLAY */}
+                    {feedbackState && (
+                        <div className={`absolute inset-0 z-[100] flex items-center justify-center pointer-events-none transition-opacity duration-500 ${feedbackState.isExiting ? 'opacity-0' : 'opacity-100'}`}>
+                            {feedbackState.content}
+                        </div>
+                    )}
+
+                    {/* 📍 Marker Modal */}
+                    {isMarkerModalOpen && (
+                        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={(e) => e.stopPropagation()}>
+                            <div className="bg-zinc-900 border border-pink-500/50 p-6 rounded-2xl shadow-2xl w-full max-w-sm space-y-4">
+                                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                                    <span>📍</span> Add Scene Marker
+                                </h3>
+
+                                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                    {(settings ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
+                                        <button
+                                            key={emoji}
+                                            onClick={() => setMarkerIcon(emoji)}
+                                            className={`text-2xl p-2 rounded-lg transition-colors ${markerIcon === emoji ? "bg-pink-600" : "bg-zinc-800 hover:bg-zinc-700"}`}
+                                        >
+                                            {emoji}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <input
+                                    type="text"
+                                    value={markerLabel}
+                                    onChange={(e) => setMarkerLabel(e.target.value)}
+                                    placeholder="Label (e.g. Chorus, Solo)..."
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-pink-500"
+                                    onKeyDown={(e) => {
+                                        e.stopPropagation();
+                                        if (e.key === 'Enter') saveMarker();
+                                        if (e.key === 'Escape') setIsMarkerModalOpen(false);
+                                    }}
+                                />
+
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        onClick={() => setIsMarkerModalOpen(false)}
+                                        className="px-4 py-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={saveMarker}
+                                        className="px-6 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-white font-bold shadow-lg shadow-pink-600/20"
+                                    >
+                                        Save Marker
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* 🖼️ Gallery Controls (Hover Overlay) */}
                     {images.length > 1 && (
                         <>
@@ -279,7 +751,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* 📏 SEEK BAR */}
-                        <div className="relative w-full h-2 group/seek cursor-pointer mb-4 flex items-center">
+                        <div className="relative w-full h-2 group/seek cursor-pointer mb-4">
                             {/* Track */}
                             <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
                                 {/* Progress */}
@@ -287,13 +759,74 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                     className="absolute top-0 left-0 h-full bg-pink-600 rounded-full pointer-events-none"
                                     style={{ width: `${progressPercent}%` }}
                                 />
+
+                                {/* 🔁 Loop Region */}
+                                {loopStart !== null && loopEnd !== null && loopEnd > loopStart && (
+                                    <div
+                                        className="absolute top-0 bottom-0 bg-blue-500/60 pointer-events-none z-[5]"
+                                        style={{
+                                            left: `${(loopStart / (duration || 1)) * 100}%`,
+                                            width: `${((loopEnd - loopStart) / (duration || 1)) * 100}%`
+                                        }}
+                                    />
+                                )}
+                                {/* Loop Start Point (A) */}
+                                {loopStart !== null && (
+                                    <div
+                                        className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-[15] pointer-events-none"
+                                        style={{ left: `${(loopStart / (duration || 1)) * 100}%` }}
+                                    />
+                                )}
+                                {/* Loop End Point (B) */}
+                                {loopEnd !== null && (
+                                    <div
+                                        className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-[15] pointer-events-none"
+                                        style={{ left: `${(loopEnd / (duration || 1)) * 100}%` }}
+                                    />
+                                )}
+
+                                {/* 📍 Markers on Track */}
+                                {markers.map(m => {
+                                    const isQuick = m.icon === (settings ? settings.quickActionIcon : "💦") || m.label === (settings ? settings.quickActionLabel : "Cum");
+                                    return (
+                                        <div
+                                            key={m.id}
+                                            className={`absolute top-0 w-1 h-full z-10 pointer-events-none opacity-70 ${isQuick ? "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "bg-yellow-400"}`}
+                                            style={{ left: `${(m.time / (duration || 1)) * 100}%` }}
+                                        />
+                                    );
+                                })}
                             </div>
 
                             {/* Handle (Always Visible) */}
                             <div
-                                className="absolute h-3 w-3 bg-pink-500 rounded-full shadow border border-white pointer-events-none transform -translate-x-1/2"
+                                className="absolute h-3 w-3 bg-pink-500 rounded-full shadow border border-white pointer-events-none transform -translate-x-1/2 z-20"
                                 style={{ left: `${progressPercent}%` }}
                             />
+
+                            {/* 📍 Interactive Marker Hover Points */}
+                            {markers.map(m => (
+                                <div
+                                    key={`hover-${m.id}`}
+                                    className="absolute top-1/2 -translate-y-1/2 w-4 h-6 -ml-2 z-[60] group/marker cursor-pointer flex items-center justify-center transition-transform"
+                                    style={{ left: `${(m.time / (duration || 1)) * 100}%` }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (audioRef.current) {
+                                            audioRef.current.currentTime = m.time;
+                                            setCurrentTime(m.time);
+                                        }
+                                    }}
+                                >
+                                    {/* Tooltip */}
+                                    <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-black/80 border border-white/10 text-white p-3 rounded-xl shadow-2xl backdrop-blur-md opacity-0 group-hover/marker:opacity-100 pointer-events-none transition-all duration-300 transform translate-y-2 group-hover/marker:translate-y-0 flex flex-col items-center gap-1 min-w-[80px] z-[100]">
+                                        <span className="text-3xl filter drop-shadow-lg">{m.icon}</span>
+                                        <span className="text-sm font-bold text-zinc-100 whitespace-nowrap">{m.label}</span>
+                                        <span className="text-[10px] font-mono text-pink-400 bg-pink-500/10 px-1.5 py-0.5 rounded mt-1">{formatTime(m.time)}</span>
+                                    </div>
+                                </div>
+                            ))}
+
                             {/* Input Hitbox */}
                             <input
                                 type="range"
@@ -396,12 +929,26 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                     {viewMode === 'art' ? <Disc size={20} /> : <ImageIcon size={20} />}
                                 </button>
 
+
+
                                 {/* Loop Button */}
                                 <button
                                     onClick={() => setIsLoop(!isLoop)}
                                     className={`p-1 transition-colors ${isLoop ? 'text-pink-500' : 'text-zinc-400 hover:text-white'}`}
                                 >
                                     <Repeat size={20} />
+                                </button>
+
+                                {/* Marker Button */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsMarkerModalOpen(true);
+                                    }}
+                                    className="p-1 transition-colors text-zinc-400 hover:text-pink-500"
+                                    title="Add Marker (M)"
+                                >
+                                    <MapPin size={20} />
                                 </button>
 
                                 <button onClick={toggleFullscreen} className="hover:text-pink-500 transition-colors p-1">
@@ -412,24 +959,17 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                     </div>
                 </div>
 
-                {/* 📝 Metadata Block */}
-                <div className="space-y-4 px-2">
-                    <h1 className="text-2xl font-bold leading-tight text-white line-clamp-2">
-                        {currentTrack?.title || title}
-                    </h1>
+                {/* 🎵 Track Info & Custom Content (MediaInfo) */}
+                <div className="space-y-6">
+                    {/* Now Playing Title */}
+                    <div className="px-2">
+                        <div className="text-xs font-bold text-pink-500 uppercase tracking-widest mb-1">Now Playing</div>
+                        <h2 className="text-xl md:text-2xl font-bold text-white leading-tight line-clamp-2">
+                            {currentTrack?.title || "Unknown Track"}
+                        </h2>
+                    </div>
 
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        {/* Stats */}
-                        <div className="flex items-center gap-2 text-sm text-zinc-400">
-                            <span className="text-white font-bold">{viewCount?.toLocaleString() || 0} views</span>
-                            <span>•</span>
-                            <span>{new Date(createdAt).toLocaleDateString()}</span>
-                            <span className="flex items-center gap-1 ml-2 border-l border-white/10 pl-3">
-                                <ListMusic size={14} /> {tracks.length} Tracks
-                            </span>
-                        </div>
-
-                        {/* Actions Toolbar */}
+                    <div className="px-2">
                         <VideoActions
                             id={id}
                             initialLikes={rating}
@@ -437,12 +977,8 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                         />
                     </div>
 
-                    <div className="bg-zinc-900/50 rounded-xl p-4 text-sm text-zinc-300 whitespace-pre-wrap hover:bg-zinc-900 transition-colors">
-                        <div className="flex gap-2 font-bold mb-2">
-                            <span>Album: {title}</span>
-                        </div>
-                        {description || "No description provided."}
-                    </div>
+                    {/* Injected Content (MediaInfo) */}
+                    {children}
                 </div>
 
             </div>
@@ -507,9 +1043,6 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
             <audio
                 ref={audioRef}
                 src={currentTrack?.url}
-                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-                onEnded={handleEnded}
             />
 
             <style jsx>{`

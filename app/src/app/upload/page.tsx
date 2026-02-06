@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link as LinkIcon, Video, Book, Music, UploadCloud, Save, Image as ImageIcon, X, File, Film, FileAudio } from "lucide-react";
 import axios from "axios";
 import JSZip from "jszip";
+import { TagEditor } from "@/components/TagEditor";
 
 export default function UploadPage() {
     const [activeType, setActiveType] = useState("LINK");
@@ -21,9 +22,14 @@ export default function UploadPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
     const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
+
+
     // 🎵 Audio Track Management
     const [detectedTracks, setDetectedTracks] = useState<string[]>([]);
     const [trackTitles, setTrackTitles] = useState<Record<string, string>>({}); // Filename -> Title
+
+    // 🏷️ Tags
+    const [tags, setTags] = useState<{ id: string, name: string }[]>([]);
 
     const pasteAreaRef = useRef<HTMLDivElement>(null);
     const dropZoneRef = useRef<HTMLDivElement>(null);
@@ -195,6 +201,11 @@ export default function UploadPage() {
             formData.append("trackTitles", JSON.stringify(trackTitles));
         }
 
+        // Tags
+        if (tags.length > 0) {
+            formData.append("tags", JSON.stringify(tags.map(t => t.name)));
+        }
+
         try {
             // 🚀 Use Axios for Progress Tracking!
             // We connect to our new API route instead of Server Action directly
@@ -226,6 +237,7 @@ export default function UploadPage() {
                 setThumbnailFile(null);
                 setUploadProgress(0);
                 setStatusMessage("");
+                setTags([]);
             } else {
                 setStatusMessage("Failed.");
                 alert("Error: " + response.data.message);
@@ -479,6 +491,13 @@ export default function UploadPage() {
                         <div className="flex-1">
                             <label className="text-xs font-bold text-zinc-500 ml-1">MEMO</label>
                             <textarea name="description" placeholder="Write your thoughts..." className="w-full h-full min-h-[120px] bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-300 focus:outline-none focus:border-pink-500 transition-colors resize-none font-mono text-sm leading-relaxed" />
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-zinc-500 ml-1">TAGS</label>
+                            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2 min-h-[50px]">
+                                <TagEditor initialTags={tags} onChange={setTags} />
+                            </div>
                         </div>
                     </div>
 
