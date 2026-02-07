@@ -229,6 +229,44 @@ export function SettingsForm() {
                 </div>
             </section>
 
+            {/* 📚 Library Management */}
+            <section className="space-y-4">
+                <h2 className="text-xl font-bold text-pink-500 flex items-center gap-2">
+                    <span className="p-1 bg-pink-500/10 rounded-lg">📚</span> Library Management
+                </h2>
+
+                <div className="bg-zinc-900 border border-white/5 rounded-xl p-6 space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                            <label className="font-medium text-white">Scan for New Content</label>
+                            <p className="text-sm text-zinc-400">
+                                Manually scan the <code>/library</code> folder for new Manga or Audio folders added via file transfer.
+                            </p>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                if (confirm("Start scanning library folders? This may take a while.")) {
+                                    setSaved(false); // Reuse saved state for feedback or create new one
+                                    try {
+                                        const res = await fetch("/api/admin/scan", { method: "POST" });
+                                        if (res.ok) {
+                                            alert("✅ Scan Complete! Check logs for details.");
+                                        } else {
+                                            alert("❌ Scan Failed.");
+                                        }
+                                    } catch (e) {
+                                        alert("❌ Error triggering scan.");
+                                    }
+                                }
+                            }}
+                            className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
+                        >
+                            <RefreshCw size={18} /> Scan Now
+                        </button>
+                    </div>
+                </div>
+            </section>
+
             {/* 💾 Actions */}
             <div className="flex items-center gap-4 pt-4">
                 <button

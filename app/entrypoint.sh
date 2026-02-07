@@ -25,6 +25,14 @@ chown -R nextjs:nodejs /app/db || true
 chown -R nextjs:nodejs /app/.cache || true
 
 
+echo "📦 Applying database migrations..."
+if [ -f "/app/prisma/schema.prisma" ]; then
+    npx prisma db push --accept-data-loss
+else
+    echo "⚠️ Prisma schema not found, skipping migration."
+fi
+
+
 echo "✅ Environment ready. Starting server..."
 
 # 元のCMDを実行（server.js）
