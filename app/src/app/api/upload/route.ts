@@ -117,13 +117,24 @@ export async function POST(req: NextRequest) {
             } catch (e) { console.error("Failed to parse tags", e); }
         }
 
+        // 🛡️ Sanitize Helper for Filenames/Folders (Allow Unicode, Block System Chars)
+        // KEEPING THIS for logging or metadata if needed, but NOT for filesystem paths causing issues.
+        const sanitizeFilename = (name: string) => {
+            return name
+                .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") // Block invalid chars
+                .replace(/[. ]+$/, "") // Remove trailing dots/spaces (Windows issue)
+                .trim() || "Untitled";
+        };
+
         // 1️⃣ Process Thumbnail
         if (thumbnailFile && thumbnailFile.size > 0 && thumbnailFile.name !== "undefined") {
             try {
                 const bytes = await thumbnailFile.arrayBuffer();
                 const buffer = Buffer.from(bytes);
-                const safeName = thumbnailFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-                const fileName = `${Date.now()}_thumb_${safeName}`;
+                // 🛡️ Use UUID for thumbnail filename
+                const { randomUUID } = await import('crypto');
+                const thumbExt = thumbnailFile.name.split('.').pop() || 'jpg';
+                const fileName = `${Date.now()}_thumb_${randomUUID()}.${thumbExt}`;
                 const savePath = join(thumbDir, fileName);
 
                 await writeFile(savePath, buffer);
@@ -145,28 +156,18 @@ export async function POST(req: NextRequest) {
                 const targetDirName = type === "MANGA" ? "manga" : "audio";
                 console.log(`📚 Processing ${label} ZIP Upload: ${uploadedFile.name}`);
 
-                const safeTitle = title.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-                let itemDir = join(libraryDir, targetDirName, safeTitle);
+                // 🛡️ Use UUID for folder name
+                const { randomUUID } = await import('crypto');
+                const folderName = randomUUID();
+
+                let itemDir = join(libraryDir, targetDirName, folderName);
                 let finalTitle = title;
 
-                // 🛡️ Safety Check: If folder exists, append timestamp to make it unique
-                try {
-                    await mkdir(itemDir, { recursive: true }); // Try creating (recursive for parents)
-                } catch (e: any) {
-                    if (e.code === 'EEXIST') {
-                        console.log("⚠️ Folder exists, creating unique path.");
-                        const timestamp = Date.now();
-                        finalTitle = `${title} (${timestamp})`; // Update title for DB
-                        const safeUnique = `${safeTitle}_${timestamp}`;
-                        itemDir = join(libraryDir, targetDirName, safeUnique);
-                        await mkdir(itemDir, { recursive: true });
-                    } else {
-                        throw e; // Real error
-                    }
-                }
+                await mkdir(itemDir, { recursive: true });
 
                 // STREAM ZIP to Disk
-                const tempZipPath = join(uploadDir, `${Date.now()}_temp_${safeTitle}.zip`);
+                // 🛡️ Use UUID for temp zip filename
+                const tempZipPath = join(uploadDir, `${Date.now()}_temp_${randomUUID()}.zip`);
 
                 const stream = uploadedFile.stream();
                 const body = Readable.fromWeb(stream as any);
@@ -247,8 +248,10 @@ export async function POST(req: NextRequest) {
             const stream = mainFile.stream();
             const body = Readable.fromWeb(stream as any); // Convert Web Stream to Node Stream
 
-            const safeName = mainFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-            const fileName = `${Date.now()}_file_${safeName}`;
+            // 🛡️ Use UUID for single file upload
+            const { randomUUID } = await import('crypto');
+            const fileExt = mainFile.name.split('.').pop() || 'bin';
+            const fileName = `${Date.now()}_file_${randomUUID()}.${fileExt}`;
             const savePath = join(uploadDir, fileName);
 
             // Use imported createWriteStream
