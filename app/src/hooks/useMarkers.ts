@@ -16,7 +16,7 @@ export function useMarkers(itemId: string | undefined) {
     // 🧬 Fetch Markers
     useEffect(() => {
         if (!itemId) return;
-        fetch(`/api/media/${itemId}/markers`)
+        fetch(`/umu/api/media/${itemId}/markers`)
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) setMarkers(data);
@@ -35,7 +35,7 @@ export function useMarkers(itemId: string | undefined) {
         };
 
         try {
-            const res = await fetch(`/api/media/${itemId}/markers`, {
+            const res = await fetch(`/umu/api/media/${itemId}/markers`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(newMarker),
@@ -60,7 +60,7 @@ export function useMarkers(itemId: string | undefined) {
         setMarkers(prev => prev.filter(m => m.id !== markerId));
 
         try {
-            await fetch(`/api/markers/${markerId}`, { method: "DELETE" });
+            await fetch(`/umu/api/markers/${markerId}`, { method: "DELETE" });
         } catch (e) {
             console.error("Failed to delete marker", e);
         }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import MangaReader from "@/components/MangaReader";
 import { MediaInfo } from "@/components/MediaInfo";
 import { Eye } from "lucide-react";
@@ -54,7 +55,7 @@ export default async function MangaReaderPage({ params }: PageProps) {
                     // const safePage = pageFile.split('/').map(encodeURIComponent).join('/');
 
                     return {
-                        url: `/api/file/${relativeRoot}/${pageFile}`,
+                        url: `/umu/api/file/${relativeRoot}/${pageFile}`,
                         width: p.w || 0,
                         height: p.h || 0
                     };
@@ -123,12 +124,12 @@ export default async function MangaReaderPage({ params }: PageProps) {
                     <div className="flex flex-col gap-3">
                         <h3 className="font-bold text-zinc-400 px-1 uppercase tracking-wider text-xs">Read Next</h3>
                         {recommendations.map((rec: any) => ( // Typings are loose for now
-                            <a key={rec.id} href={`/manga/${rec.id}`} className="flex gap-3 group p-2 rounded-xl hover:bg-white/5 transition-colors">
+                            <Link key={rec.id} href={`/manga/${rec.id}`} className="flex gap-3 group p-2 rounded-xl hover:bg-white/5 transition-colors">
                                 {/* Thumb */}
                                 <div className="w-24 h-32 bg-zinc-800 rounded shadow-lg overflow-hidden relative shrink-0">
                                     {rec.thumbnail && (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={rec.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                        <img src={rec.thumbnail?.startsWith("/") ? `/umu${rec.thumbnail}` : rec.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                     )}
                                     <div className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-bold px-1 rounded text-white">
                                         {rec.pages} P
@@ -148,7 +149,7 @@ export default async function MangaReaderPage({ params }: PageProps) {
                                         <span>{new Date(rec.createdAt).toLocaleDateString()}</span>
                                     </div>
                                 </div>
-                            </a>
+                            </Link>
                         ))}
                         {recommendations.length === 0 && (
                             <p className="text-xs text-zinc-600 p-4 text-center border border-dashed border-zinc-800 rounded">No other manga yet... Time to collect more!</p>

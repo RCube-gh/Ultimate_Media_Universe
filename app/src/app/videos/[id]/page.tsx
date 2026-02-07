@@ -113,10 +113,10 @@ export default async function VideoPlayerPage(props: Props) {
                                         <>
                                             <div
                                                 className="absolute inset-0 bg-cover bg-center opacity-40 blur-md scale-110"
-                                                style={{ backgroundImage: `url('${rec.thumbnail}')` }}
+                                                style={{ backgroundImage: `url('${rec.thumbnail?.startsWith("/") ? `/umu${rec.thumbnail}` : rec.thumbnail}')` }}
                                             />
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={rec.thumbnail} alt="" className="absolute inset-0 w-full h-full object-contain z-10 transition-transform duration-500 group-hover:scale-105" />
+                                            <img src={rec.thumbnail?.startsWith("/") ? `/umu${rec.thumbnail}` : rec.thumbnail} alt="" className="absolute inset-0 w-full h-full object-contain z-10 transition-transform duration-500 group-hover:scale-105" />
                                         </>
                                     )}
                                     <div className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-bold px-1 rounded text-white z-20">

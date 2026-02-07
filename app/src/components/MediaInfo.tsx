@@ -33,7 +33,7 @@ export function MediaInfo({ item }: MediaInfoProps) {
     const handleSave = async () => {
         setLoading(true);
         try {
-            await fetch(`/api/media/${item.id}`, {
+            await fetch(`/umu/api/media/${item.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ title, description }),

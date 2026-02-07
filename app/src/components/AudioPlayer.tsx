@@ -58,7 +58,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         if (!id || recentViewers.has(id)) return;
 
         recentViewers.add(id);
-        fetch(`/api/media/${id}/view`, { method: "POST" }).catch(console.error);
+        fetch(`/umu/api/media/${id}/view`, { method: "POST" }).catch(console.error);
 
         // Allow counting again after 2 seconds
         setTimeout(() => recentViewers.delete(id), 2000);
@@ -175,7 +175,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     // 🧬 Fetch Markers
     useEffect(() => {
         if (!id) return;
-        fetch(`/api/media/${id}/markers`)
+        fetch(`/umu/api/media/${id}/markers`)
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) setMarkers(data);
@@ -188,7 +188,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         if (!audioRef.current || !id) return;
         const time = audioRef.current.currentTime;
         try {
-            const res = await fetch(`/api/media/${id}/markers`, {
+            const res = await fetch(`/umu/api/media/${id}/markers`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ time, label: markerLabel, icon: markerIcon }),
@@ -211,7 +211,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         e.stopPropagation();
         setMarkers(prev => prev.filter(m => m.id !== markerId));
         try {
-            await fetch(`/api/markers/${markerId}`, { method: "DELETE" });
+            await fetch(`/umu/api/markers/${markerId}`, { method: "DELETE" });
         } catch (e) { console.error(e); }
     };
 
@@ -244,7 +244,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
             const time = audio.currentTime;
 
             // 1. Save Marker
-            fetch(`/api/media/${id}/markers`, {
+            fetch(`/umu/api/media/${id}/markers`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -665,7 +665,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                             viewMode === 'art' ? (
                                 // 🖼️ ART MODE: Full Clean Image
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={activeImage} alt="Jacket" className="w-full h-full object-contain pointer-events-none shadow-2xl drop-shadow-2xl" />
+                                <img src={activeImage.startsWith('/') ? `/umu${activeImage}` : activeImage} alt="Jacket" className="w-full h-full object-contain pointer-events-none shadow-2xl drop-shadow-2xl" />
                             ) : (
                                 // 💿 VINYL MODE: Spinning Disc
                                 <div className={`relative w-[30vw] h-[30vw] max-w-[400px] max-h-[400px] aspect-square rounded-full shadow-2xl ring-4 ring-white/10 ${isPlaying ? 'animate-[spin_20s_linear_infinite]' : ''}`}>
@@ -673,7 +673,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                     <div className="absolute inset-0 rounded-full bg-black" />
                                     {/* Jacket Crop */}
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={activeImage} alt="Vinyl" className="absolute inset-0 w-full h-full object-cover rounded-full opacity-90" />
+                                    <img src={activeImage.startsWith('/') ? `/umu${activeImage}` : activeImage} alt="Vinyl" className="absolute inset-0 w-full h-full object-cover rounded-full opacity-90" />
                                     {/* Vinyl Grooves (Optional Gradient) */}
                                     <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,transparent_40%,rgba(0,0,0,0.5)_41%,rgba(0,0,0,0.5)_42%,transparent_43%)] opacity-50 pointer-events-none" />
                                     {/* Center Hole */}
@@ -1082,7 +1082,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                     <div className="w-24 aspect-video bg-zinc-900 rounded-lg overflow-hidden relative shrink-0">
                                         {rec.thumbnail ? (
                                             // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={rec.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                            <img src={rec.thumbnail?.startsWith('/') ? `/umu${rec.thumbnail}` : rec.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-zinc-700">
                                                 <Music2 size={16} />
@@ -1112,7 +1112,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
 
             <audio
                 ref={audioRef}
-                src={currentTrack?.url}
+                src={currentTrack?.url?.startsWith('/') ? `/umu${currentTrack.url}` : currentTrack?.url}
             />
 
             <style jsx>{`

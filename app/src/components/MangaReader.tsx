@@ -32,7 +32,7 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
         if (!id || recentViewers.has(id)) return;
 
         recentViewers.add(id);
-        fetch(`/api/media/${id}/view`, { method: "POST" }).catch(console.error);
+        fetch(`/umu/api/media/${id}/view`, { method: "POST" }).catch(console.error);
 
         // Allow counting again after 2 seconds
         setTimeout(() => recentViewers.delete(id), 2000);
