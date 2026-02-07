@@ -7,8 +7,8 @@ WORKDIR /app
 
 # ★ OpenSSL を必ず入れる（Prisma 必須）
 RUN apt-get update \
- && apt-get install -y openssl \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # 依存関係
 COPY package.json package-lock.json* ./
@@ -24,8 +24,8 @@ WORKDIR /app
 
 # ★ builder でも OpenSSL を入れる
 RUN apt-get update \
- && apt-get install -y openssl \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # ソースコピー
 COPY . .
@@ -60,29 +60,33 @@ ENV HOSTNAME=0.0.0.0
 
 # ★ runner にも OpenSSL を入れる（実行時に必要）
 RUN apt-get update \
- && apt-get install -y openssl \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # 非 root ユーザー
 RUN addgroup --system --gid 1001 nodejs \
- && adduser  --system --uid 1001 nextjs
+    && adduser  --system --uid 1001 nextjs
 
 # Next.js standalone 出力
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# Next.js standalone 出力
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Prisma を含む node_modules を丸ごとコピー
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Prisma schema（必要な場合）
-COPY --from=builder /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
-# 権限調整
-RUN chown -R nextjs:nodejs /app
+# 権限調整スクリプト
+COPY --chown=nextjs:nodejs entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 USER nextjs
 
 EXPOSE 3000
 
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["node", "server.js"]
 

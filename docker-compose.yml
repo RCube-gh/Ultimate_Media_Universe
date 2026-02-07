@@ -1,5 +1,17 @@
 services:
+  # 🛠️ Init Container: Sets up directories & permissions before app starts
+  init:
+    image: alpine:latest
+    command: >
+      sh -c " mkdir -p /data/db /data/cache/thumbnails /library/uploads /library/thumbnails /library/manga /library/audio; chmod -R 777 /data /library; echo '✅ Init complete: Created directories & set permissions (777)'; "
+    volumes:
+      - ./data:/data
+      - ./library:/library
+
   fapflix:
+    depends_on:
+      init:
+        condition: service_completed_successfully
     container_name: fapflix-v2
     build:
       context: ./app
