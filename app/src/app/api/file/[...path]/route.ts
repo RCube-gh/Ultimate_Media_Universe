@@ -5,8 +5,11 @@ import path from "path";
 import sharp from "sharp";
 import crypto from "crypto"; // For hash
 
-// 📂 Target: ../library
-const LIBRARY_ROOT = path.resolve(process.cwd(), "..", "library");
+// 📂 Target: ../library (Local) or ./library (Docker/Production)
+let LIBRARY_ROOT = path.resolve(process.cwd(), "..", "library");
+if (!fs.existsSync(LIBRARY_ROOT)) {
+    LIBRARY_ROOT = path.join(process.cwd(), "library");
+}
 const PROCESS_ROOT = process.cwd(); // app root
 const CACHE_ROOT = path.join(PROCESS_ROOT, ".cache", "thumbnails");
 

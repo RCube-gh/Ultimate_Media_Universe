@@ -5,10 +5,10 @@ echo "🚀 Initializing Fapflix Environment..."
 
 # 1. Library Directories
 echo "📁 Checking library directories..."
-mkdir -p /app/library/uploads
-mkdir -p /app/library/thumbnails
-mkdir -p /app/library/manga
-mkdir -p /app/library/audio
+mkdir -p /library/uploads
+mkdir -p /library/thumbnails
+mkdir -p /library/manga
+mkdir -p /library/audio
 
 # 2. Database Directory
 echo "📁 Checking database directory..."
@@ -20,7 +20,7 @@ mkdir -p /app/.cache/thumbnails
 
 # 4. Permissions (Try to fix if possible, though host volume mounts might restrict this)
 echo "🔒 Fixing permissions..."
-chown -R nextjs:nodejs /app/library || true
+chown -R nextjs:nodejs /library || true
 chown -R nextjs:nodejs /app/db || true
 chown -R nextjs:nodejs /app/.cache || true
 

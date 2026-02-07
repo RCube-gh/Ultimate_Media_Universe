@@ -76,8 +76,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Docker: /app/library (Mounted at /app/library)
+
         const projectRoot = process.cwd();
-        const libraryDir = join(projectRoot, "library");
+        let libraryDir = join(projectRoot, "..", "library"); // Local dev / Docker root
+
+        // 🛡️ Fallback: If not found, try inner directory (old config)
+        if (!require("fs").existsSync(libraryDir)) {
+            libraryDir = join(projectRoot, "library");
+        }
         const uploadDir = join(libraryDir, "uploads");
         const thumbDir = join(libraryDir, "thumbnails");
 

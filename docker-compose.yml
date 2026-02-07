@@ -31,7 +31,7 @@ services:
       # 📁 Media Library (Videos, Manga, Audio)
       # CHANGE THIS to your actual media path on the Raspberry Pi / Host
       # Example: - /mnt/hdd/Adult:/app/library
-      - ./library:/app/library
+      - ./library:/library
 
       # 🖼️ Thumbnail Cache (Optional but recommended)
       - ./data/cache:/app/.cache
