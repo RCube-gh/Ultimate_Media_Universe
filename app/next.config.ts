@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
     output: "standalone",
-    basePath: "/umu",
+    basePath: "/umu", // 🟢 Restored!
     /* config options here */
     serverExternalPackages: ['sharp', 'prisma', '@prisma/client'],
     experimental: {
