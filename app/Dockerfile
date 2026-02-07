@@ -5,7 +5,12 @@ FROM node:20-bookworm-slim AS deps
 
 WORKDIR /app
 
-# 依存関係のインストール
+# ★ OpenSSL を必ず入れる（Prisma 必須）
+RUN apt-get update \
+ && apt-get install -y openssl \
+ && rm -rf /var/lib/apt/lists/*
+
+# 依存関係
 COPY package.json package-lock.json* ./
 RUN npm ci
 
@@ -16,6 +21,13 @@ RUN npm ci
 FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
+
+# ★ builder でも OpenSSL を入れる
+RUN apt-get update \
+ && apt-get install -y openssl \
+ && rm -rf /var/lib/apt/lists/*
+
+# ソースコピー
 COPY . .
 
 # 汚染防止
@@ -24,10 +36,10 @@ RUN rm -rf .next node_modules
 # clean node_modules を復元
 COPY --from=deps /app/node_modules ./node_modules
 
-# Prisma Client 生成（★重要）
+# Prisma Client 生成
 RUN npx prisma generate
 
-# Next.js telemetry off
+# Next.js telemetry 無効
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Next.js build（standalone）
@@ -46,6 +58,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# ★ runner にも OpenSSL を入れる（実行時に必要）
+RUN apt-get update \
+ && apt-get install -y openssl \
+ && rm -rf /var/lib/apt/lists/*
+
 # 非 root ユーザー
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 nextjs
@@ -55,7 +72,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# ★ Prisma を含む node_modules を丸ごとコピー
+# Prisma を含む node_modules を丸ごとコピー
 COPY --from=builder /app/node_modules ./node_modules
 
 # Prisma schema（必要な場合）
