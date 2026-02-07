@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
                         thumbnail: thumbnailPath, // Maybe null initially if auto-gen needed
                         size: mainFile ? BigInt(mainFile.size) : null,
                         duration,
-                        status: (type === "VIDEO" && !thumbnailPath) ? "PROCESSING" : "READY", // Only video needs processing typically
+                        status: (type === "VIDEO") ? "PROCESSING" : "READY", // Always process video for sprites
                         tags: tagData,
                     },
                 });

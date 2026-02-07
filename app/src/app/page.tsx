@@ -14,8 +14,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
     // 🕵️‍♀️ Fetch Real Data with Search
     const newArrivals = await prisma.mediaItem.findMany({
         where: query ? {
-            title: { contains: query }
-        } : {},
+            title: { contains: query },
+            status: "READY"
+        } : { status: "READY" },
         orderBy: { createdAt: "desc" },
         take: 20, // Increased fetch limit for search results visibility
     });

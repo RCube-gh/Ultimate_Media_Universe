@@ -77,6 +77,17 @@ export default async function VideoPlayerPage(props: Props) {
            ============================= */}
                 <div className="lg:col-span-2 xl:col-span-3 flex flex-col gap-4">
 
+                    {/* ⚠️ Processing Alert */}
+                    {(item as any).status === "PROCESSING" && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 rounded-xl flex items-center gap-3 animate-pulse">
+                            <Clock className="animate-spin" />
+                            <div>
+                                <h3 className="font-bold">Processing Video...</h3>
+                                <p className="text-sm opacity-80">We are generating thumbnails and previews. Some features may be unavailable.</p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* 🎞️ Player Container (Wrapper for Aspect Ratio) */}
                     <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl shadow-black border border-zinc-800 relative z-10">
                         <VideoPlayer
