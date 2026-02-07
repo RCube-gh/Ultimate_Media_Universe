@@ -64,9 +64,24 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         setTimeout(() => recentViewers.delete(id), 2000);
     }, [id]);
 
+
     const { settings, loading: settingsLoading } = useSettings(); // Move up to be accessible
 
     const audioRef = useRef<HTMLAudioElement>(null);
+
+    // 🧹 Cleanup on Unmount (Stop Audio Ghosting 👻)
+    useEffect(() => {
+        const audio = audioRef.current;
+        return () => {
+            if (audio) {
+                console.log("🧹 Stopping Audio Playback (Unmount)");
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+            }
+        };
+    }, []);
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
