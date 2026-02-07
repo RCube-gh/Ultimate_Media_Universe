@@ -16,17 +16,28 @@ export function SearchBar() {
         setQuery(searchParams.get("q") || "");
     }, [searchParams]);
 
+    // 🕰️ Debounce Logic
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const currentQ = searchParams.get("q") || "";
+            if (query === currentQ) return; // No change
+
+            startTransition(() => {
+                const params = new URLSearchParams(window.location.search);
+                if (query) {
+                    params.set("q", query);
+                } else {
+                    params.delete("q");
+                }
+                router.replace(`?${params.toString()}`);
+            });
+        }, 500); // Wait 500ms after last keystroke
+
+        return () => clearTimeout(timer);
+    }, [query, router, searchParams]);
+
     const handleSearch = (term: string) => {
         setQuery(term);
-        startTransition(() => {
-            const params = new URLSearchParams(window.location.search);
-            if (term) {
-                params.set("q", term);
-            } else {
-                params.delete("q");
-            }
-            router.replace(`?${params.toString()}`);
-        });
     };
 
     return (
