@@ -245,7 +245,7 @@ export default function UploadPage() {
                         formData.append("tags", JSON.stringify(tags.map(t => t.name)));
                     }
 
-                    await axios.post("/api/upload", formData, {
+                    await axios.post("/umu/api/upload", formData, {
                         headers: { "Content-Type": "multipart/form-data" }
                     });
 
@@ -299,7 +299,7 @@ export default function UploadPage() {
         }
 
         try {
-            const response = await axios.post("/api/upload", formData, {
+            const response = await axios.post("/umu/api/upload", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {

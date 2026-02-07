@@ -27,7 +27,7 @@ export function TagEditor({ mediaId, initialTags, onChange }: TagEditorProps) {
 
     // Fetch all tags for autocomplete
     useEffect(() => {
-        fetch("/api/tags")
+        fetch("/umu/api/tags")
             .then((res) => res.json())
             .then((data) => {
                 if (Array.isArray(data)) setAllTags(data);
@@ -63,7 +63,7 @@ export function TagEditor({ mediaId, initialTags, onChange }: TagEditorProps) {
         if (mediaId) {
             try {
                 const tagNames = newTags.map(t => t.name);
-                await fetch(`/api/media/${mediaId}`, {
+                await fetch(`/umu/api/media/${mediaId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',

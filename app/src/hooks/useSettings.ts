@@ -16,7 +16,7 @@ export function useSettings() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch("/api/settings")
+        fetch("/umu/api/settings")
             .then((r) => r.json())
             .then((data) => {
                 setSettings(data);
@@ -30,7 +30,7 @@ export function useSettings() {
 
     const updateSettings = async (updates: Partial<UserSettings>) => {
         try {
-            const res = await fetch("/api/settings", {
+            const res = await fetch("/umu/api/settings", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(updates),
