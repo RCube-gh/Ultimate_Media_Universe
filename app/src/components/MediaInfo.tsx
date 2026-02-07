@@ -20,6 +20,7 @@ interface MediaInfoProps {
         duration: number | null;
         type: string; // VIDEO, AUDIO, MANGA
         pages?: number | null; // For Manga
+        url?: string | null;
     };
 }
 
@@ -27,6 +28,7 @@ export function MediaInfo({ item }: MediaInfoProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [title, setTitle] = useState(item.title);
     const [description, setDescription] = useState(item.description || "");
+    const [url, setUrl] = useState(item.url || "");
     const [loading, setLoading] = useState(false);
     const router = useRouter();
 
@@ -36,7 +38,7 @@ export function MediaInfo({ item }: MediaInfoProps) {
             await fetch(`/umu/api/media/${item.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title, description }),
+                body: JSON.stringify({ title, description, url }),
             });
             setIsEditing(false);
             router.refresh();
@@ -50,6 +52,7 @@ export function MediaInfo({ item }: MediaInfoProps) {
     const handleCancel = () => {
         setTitle(item.title);
         setDescription(item.description || "");
+        setUrl(item.url || "");
         setIsEditing(false);
     };
 
@@ -147,6 +150,17 @@ export function MediaInfo({ item }: MediaInfoProps) {
                             />
                         </div>
 
+                        <div>
+                            <label className="block text-xs font-bold text-zinc-500 mb-2 uppercase">Source URL</label>
+                            <input
+                                type="url"
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-200 focus:outline-none focus:border-pink-500/50 font-mono"
+                                placeholder="https://..."
+                            />
+                        </div>
+
                         {/* Tag Editor integrated here in edit mode */}
                         <div>
                             <label className="block text-xs font-bold text-zinc-500 mb-2 uppercase">Tags</label>
@@ -156,6 +170,15 @@ export function MediaInfo({ item }: MediaInfoProps) {
                 ) : (
                     <>
                         <div className="mb-4 text-zinc-200">{item.description || "No description provided."}</div>
+
+                        {item.url && (
+                            <div className="mb-4 flex items-center gap-2 text-xs">
+                                <span className="text-zinc-500 font-bold uppercase">Source:</span>
+                                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300 hover:underline truncate max-w-md font-mono">
+                                    {item.url}
+                                </a>
+                            </div>
+                        )}
 
                         {item.tags && item.tags.length > 0 && (
                             <div className="mt-4 pt-4 border-t border-zinc-800">

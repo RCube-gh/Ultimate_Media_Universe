@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
         const formData = await req.formData();
 
         const url = formData.get("url") as string;
+        const sourceUrl = formData.get("source_url") as string;
         const title = formData.get("title") as string;
         const type = formData.get("type") as string;
         const description = formData.get("description") as string;
@@ -309,7 +310,7 @@ export async function POST(req: NextRequest) {
             const newItem = await prisma.mediaItem.create({
                 data: {
                     title,
-                    url: url || null,
+                    url: url || sourceUrl || null,
                     type,
                     description,
                     isArchived,

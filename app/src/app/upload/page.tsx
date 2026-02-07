@@ -663,8 +663,8 @@ export default function UploadPage() {
                             <input name="title" type="text" placeholder="Content title..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-lg text-white focus:outline-none focus:border-pink-500 transition-colors" required />
                         </div>
 
-                        {/* URL Field (Shown for Manga mainly) */}
-                        <div className={(activeType === "MANGA" || activeType === "AUDIO") ? "block" : "hidden"}>
+                        {/* URL Field (Shown for Manga, Audio, Video) */}
+                        <div className={(activeType === "MANGA" || activeType === "AUDIO" || activeType === "VIDEO") ? "block" : "hidden"}>
                             <label className="text-xs font-bold text-zinc-500 ml-1">SOURCE URL</label>
                             <input name="source_url" type="url" placeholder="https://..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-300 focus:outline-none focus:border-pink-500 transition-colors font-mono" />
                         </div>

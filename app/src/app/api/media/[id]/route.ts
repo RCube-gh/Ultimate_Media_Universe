@@ -19,6 +19,7 @@ export async function PATCH(
         if (typeof data.description === 'string') updateData.description = data.description;
         if (typeof data.rating === 'number') updateData.rating = data.rating;
         if (typeof data.isFavorite === 'boolean') updateData.isFavorite = data.isFavorite;
+        if (typeof data.url === 'string') updateData.url = data.url;
 
         // Handle Tags
         // Expecting data.tags to be an array of tag names ["tag1", "tag2"]
