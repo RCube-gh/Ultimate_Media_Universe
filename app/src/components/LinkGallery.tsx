@@ -150,9 +150,10 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
                                 {link.thumbnail ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
-                                        src={link.thumbnail.startsWith("/") ? `/umu${link.thumbnail}` : link.thumbnail}
+                                        src={link.thumbnail?.startsWith("/") ? `/umu${link.thumbnail}` : link.thumbnail || ""}
                                         alt={link.title}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                        loading="lazy"
                                     />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-zinc-800/50">

@@ -60,7 +60,7 @@ ENV HOSTNAME=0.0.0.0
 
 # ★ runner にも OpenSSL を入れる（実行時に必要）
 RUN apt-get update \
-    && apt-get install -y openssl \
+    && apt-get install -y openssl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # 非 root ユーザー
