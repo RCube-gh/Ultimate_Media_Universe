@@ -44,7 +44,8 @@ async function generateSpriteSheet(videoPath: string, spritePath: string, durati
 
     // NOTE: 'select' filter with time is tricky. Using fps filter is easier:
     // fps=1/10 means 1 frame every 10 seconds.
-    const cmd2 = `ffmpeg -y -i "${videoPath}" -vf "fps=1/${interval},scale=${thumbWidth}:${thumbHeight},tile=${columns}x${rows}" -frames:v 1 -q:v 2 "${spritePath}"`;
+    // scale=${thumbWidth}:${thumbHeight}:force_original_aspect_ratio=decrease,pad=${thumbWidth}:${thumbHeight}:(ow-iw)/2:(oh-ih)/2
+    const cmd2 = `ffmpeg -y -i "${videoPath}" -vf "fps=1/${interval},scale=${thumbWidth}:${thumbHeight}:force_original_aspect_ratio=decrease,pad=${thumbWidth}:${thumbHeight}:(ow-iw)/2:(oh-ih)/2,tile=${columns}x${rows}" -frames:v 1 -q:v 2 "${spritePath}"`;
 
     console.log(`🎬 Generating Sprite Sheet: ${spritePath}`);
     // console.log(`Command: ${cmd2}`);

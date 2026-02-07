@@ -104,11 +104,11 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         return {
             backgroundImage: `url('${src}${src.includes('?') ? '&' : '?'}sprite=true&thumb=true')`,
             backgroundPosition: `${bgX}px ${bgY}px`,
-            backgroundSize: `1600px auto`, // Force correct scaling (160px * 10 cols)
+
+            backgroundSize: `1600px auto`, // 160px * 10 columns = 1600px width.
             width: `${width}px`,
             height: `${height}px`,
             backgroundRepeat: 'no-repeat',
-            // backgroundColor: 'red', // DEBUG REMOVED
         };
     };
 
@@ -935,13 +935,15 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                                     })()}px) scale(${isFullscreen ? 1.6 : 1.1})`
                                 }}
                             >
-                                <div className="w-[180px] aspect-video bg-black/90 border-2 border-pink-500/80 rounded-lg overflow-hidden shadow-[0_0_20px_rgba(236,72,153,0.4)] relative flex items-center justify-center">
+                                <div className="w-[180px] h-[101px] bg-black/90 border-2 border-pink-500/80 rounded-lg overflow-hidden shadow-[0_0_20px_rgba(236,72,153,0.4)] relative flex items-center justify-center">
                                     {hasSprite ? (
-                                        <div style={getSpriteStyle(previewTime)} />
+                                        // Sprite is always 16:9 cells (160x90). If source was vertical, it has black bars within the cell.
+                                        // We just show the cell as is.
+                                        <div style={{ transform: 'scale(1.125)', ...getSpriteStyle(previewTime) }} />
                                     ) : (
                                         <img
                                             src={`${src}${src.includes('?') ? '&' : '?'}thumb=true&time=${previewTime}`}
-                                            className="w-full h-full object-cover"
+                                            className="w-full h-full object-contain"
                                             alt="Preview"
                                         />
                                     )}

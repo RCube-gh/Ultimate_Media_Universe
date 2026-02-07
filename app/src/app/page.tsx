@@ -103,7 +103,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
                                     <div className="aspect-[3/4] rounded-xl bg-zinc-800 border border-zinc-800 group-hover:border-pink-500/50 transition-all overflow-hidden relative">
                                         {item.thumbnail ? (
                                             <img
-                                                src={item.thumbnail}
+                                                src={item.thumbnail.startsWith('/') ? `/umu${item.thumbnail}` : item.thumbnail}
                                                 alt={item.title}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                                 loading="lazy"
