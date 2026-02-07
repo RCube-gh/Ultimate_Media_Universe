@@ -248,7 +248,7 @@ export function SettingsForm() {
                                 if (confirm("Start scanning library folders? This may take a while.")) {
                                     setSaved(false); // Reuse saved state for feedback or create new one
                                     try {
-                                        const res = await fetch("/api/admin/scan", { method: "POST" });
+                                        const res = await fetch("/umu/api/admin/scan", { method: "POST" });
                                         if (res.ok) {
                                             alert("✅ Scan Complete! Check logs for details.");
                                         } else {

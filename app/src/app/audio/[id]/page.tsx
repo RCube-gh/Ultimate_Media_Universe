@@ -192,6 +192,7 @@ export default async function AudioPage({ params }: PageProps) {
                 rating={item.rating || 0}
                 isFavorite={item.isFavorite}
                 recommendations={recommendations}
+                initialLastPos={(item as any).lastPos || 0}
             >
                 <MediaInfo item={item as any} />
             </AudioPlayer>

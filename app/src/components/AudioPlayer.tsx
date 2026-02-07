@@ -52,7 +52,7 @@ interface AudioPlayerProps {
 // Global debounce for view counting
 const recentViewers = new Set<string>();
 
-export default function AudioPlayer({ id, tracks, images = [], title, description, createdAt, viewCount, rating, isFavorite, children, recommendations = [] }: AudioPlayerProps) {
+export default function AudioPlayer({ id, tracks, images = [], title, description, createdAt, viewCount, rating, isFavorite, children, recommendations = [], initialLastPos = 0 }: AudioPlayerProps & { initialLastPos?: number }) {
     // 📊 View Counter
     useEffect(() => {
         if (!id || recentViewers.has(id)) return;
@@ -63,6 +63,8 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         // Allow counting again after 2 seconds
         setTimeout(() => recentViewers.delete(id), 2000);
     }, [id]);
+
+    const { settings } = useSettings(); // Move up to be accessible
 
     const audioRef = useRef<HTMLAudioElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,50 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     const [showControls, setShowControls] = useState(true);
     const [playbackRate, setPlaybackRate] = useState(1);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+    const [showResumeToast, setShowResumeToast] = useState(false); // Resume Toast
+
+    // 💾 Progress Saving Helper
+    const lastSaveTimeRef = useRef(0);
+    const saveProgress = useCallback((time: number) => {
+        fetch(`/umu/api/media/${id}/progress`, {
+            method: "POST",
+            body: JSON.stringify({ time }),
+        }).catch(e => console.error("Save progress failed", e));
+        lastSaveTimeRef.current = time;
+    }, [id]);
+
+    // 💾 Resume Logic (On Mount)
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        // Check Settings
+        const shouldResume = settings ? settings.autoResume : true;
+
+        if (shouldResume && initialLastPos > 5) {
+            audio.currentTime = initialLastPos;
+            setCurrentTime(initialLastPos);
+            setShowResumeToast(true);
+
+            // Hide toast after 8s
+            const timer = setTimeout(() => setShowResumeToast(false), 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [initialLastPos, settings]);
+
+    // 💾 Save on Interval & Pause
+    useEffect(() => {
+        if (!isPlaying) return;
+        const interval = setInterval(() => {
+            const audio = audioRef.current;
+            if (audio && Math.abs(audio.currentTime - lastSaveTimeRef.current) > 2) {
+                saveProgress(audio.currentTime);
+            }
+        }, 5000); // Check every 5s for audio
+        return () => clearInterval(interval);
+    }, [isPlaying, saveProgress]);
+
+
 
     // 🖼️ Image Gallery State
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -166,7 +212,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     }, [triggerFeedback]);
 
     // 📍 Markers State
-    const { settings } = useSettings();
+    // settings already imported above
     const [markers, setMarkers] = useState<Marker[]>([]);
     const [isMarkerModalOpen, setIsMarkerModalOpen] = useState(false);
     const [markerLabel, setMarkerLabel] = useState("");
@@ -290,7 +336,10 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
             }
         };
         const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
+        const onPause = () => {
+            setIsPlaying(false);
+            if (audio) saveProgress(audio.currentTime);
+        };
         const onEnded = () => {
             // AB Loop shouldn't hit ended technically if set correctly, but if loopEnd is end of track...
             if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
@@ -698,7 +747,40 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                         </div>
                     )}
 
-                    {/* 📍 Marker Modal */}
+                    {/* � Resume Toast */}
+                    {showResumeToast && (
+                        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[90] animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="bg-zinc-900/90 border border-pink-500/30 backdrop-blur-md text-white pl-6 pr-2 py-0 rounded-full shadow-2xl flex items-center gap-4 h-12">
+                                <div className="flex flex-col py-1">
+                                    <span className="text-xs text-pink-200 font-bold">Resumed from {formatTime(initialLastPos || 0)}</span>
+                                    <span className="text-[10px] text-zinc-400">Welcome back!</span>
+                                </div>
+                                <div className="h-8 w-[1px] bg-white/20"></div>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (audioRef.current) {
+                                            audioRef.current.currentTime = 0;
+                                            setCurrentTime(0);
+                                            setShowResumeToast(false);
+                                        }
+                                    }}
+                                    className="text-sm font-bold hover:text-pink-400 hover:bg-white/10 -my-3 py-3 px-3 transition-colors flex items-center gap-2 rounded-r-full"
+                                >
+                                    <span className="text-lg">↺</span>
+                                    <span>Start Over</span>
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setShowResumeToast(false); }}
+                                    className="ml-2 text-zinc-500 hover:text-white"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* �📍 Marker Modal */}
                     {isMarkerModalOpen && (
                         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={(e) => e.stopPropagation()}>
                             <div className="bg-zinc-900 border border-pink-500/50 p-6 rounded-2xl shadow-2xl w-full max-w-sm space-y-4">
@@ -707,7 +789,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
                                 </h3>
 
                                 <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                                    {(settings ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
+                                    {(settings?.markerIcons ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
                                         <button
                                             key={emoji}
                                             onClick={() => setMarkerIcon(emoji)}

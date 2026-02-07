@@ -253,7 +253,6 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     }, [triggerFeedback]);
 
     // 💾 Save Marker
-    // 💾 Save Marker
     const saveMarker = async () => {
         if (!videoRef.current || !id) return;
 
@@ -601,14 +600,10 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
 
         // 2. Normal Resume (Check Settings)
-        const savedConfig = localStorage.getItem("fapflix-config");
-        let shouldResume = true;
-        if (savedConfig) {
-            try {
-                const parsed = JSON.parse(savedConfig);
-                if (parsed.autoResume === false) shouldResume = false;
-            } catch (e) { /* ignore */ }
-        }
+        // 2. Normal Resume (Check Settings)
+        // Default to true if settings not loaded yet (or check loading state)
+        // Since settings connects to DB, we prefer it.
+        const shouldResume = settings ? settings.autoResume : true;
 
         if (shouldResume && initialLastPos > 5) {
             video.currentTime = initialLastPos;
@@ -619,7 +614,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             const timer = setTimeout(() => setShowResumeToast(false), 8000);
             return () => clearTimeout(timer);
         }
-    }, [initialLastPos, serverDuration, id]);
+    }, [initialLastPos, serverDuration, id, settings]);
 
     // 💾 Progress Saving Helper
     const saveProgress = useCallback((time: number) => {
@@ -789,7 +784,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
                         {/* Emoji Picker (Simple) */}
                         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                            {(settings ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
+                            {(settings?.markerIcons ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
                                 <button
                                     key={emoji}
                                     onClick={() => setMarkerIcon(emoji)}

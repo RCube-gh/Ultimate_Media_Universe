@@ -18,6 +18,7 @@ interface MangaReaderProps {
     pages: MangaPage[];
     backUrl: string;
     className?: string;
+    initialPage?: number;
 }
 
 type ViewMode = 'paged' | 'scroll';
@@ -26,7 +27,7 @@ type SpreadMode = 'auto' | 'single';
 // Global debounce set for view counting (React Strict Mode fix)
 const recentViewers = new Set<string>();
 
-export default function MangaReader({ id, title, pages, backUrl, className }: MangaReaderProps) {
+export default function MangaReader({ id, title, pages, backUrl, className, initialPage = 0 }: MangaReaderProps) {
     // 📊 View Counter (Debounced for Strict Mode)
     useEffect(() => {
         if (!id || recentViewers.has(id)) return;
@@ -63,6 +64,9 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
     const [feedbackState, setFeedbackState] = useState<{ content: React.ReactNode, mode?: "default" | "fullscreen", isExiting?: boolean } | null>(null);
     const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    // 💾 Resume Toast
+    const [showResumeToast, setShowResumeToast] = useState(false);
+
     // ⚡ Quick Action Config
     const [actionConfig, setActionConfig] = useState({ label: "Highlight", icon: "✨" });
 
@@ -73,24 +77,15 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
         return () => window.removeEventListener("click", handleClick);
     }, []);
 
-    // ⚙️ Load Action Config
+    // ⚙️ Load Action Config (From Settings Hook now)
     useEffect(() => {
-        const loadConfig = () => {
-            const saved = localStorage.getItem("fapflix-config");
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    if (parsed.actionButtonLabel) {
-                        setActionConfig({
-                            label: parsed.actionButtonLabel,
-                            icon: parsed.actionButtonIcon || "✨"
-                        });
-                    }
-                } catch (e) { /* ignore */ }
-            }
-        };
-        loadConfig();
-    }, []);
+        if (settings) {
+            setActionConfig({
+                label: settings.quickActionLabel || "Highlight",
+                icon: settings.quickActionIcon || "✨"
+            });
+        }
+    }, [settings]);
 
     // ✨ Feedback Helper
     const triggerFeedback = useCallback((content: React.ReactNode, options?: { duration?: number, mode?: "default" | "fullscreen" }) => {
@@ -237,6 +232,42 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
         prefetch(currentViewIndex - 1);
 
     }, [currentViewIndex, views]);
+
+    // 💾 Resume Logic
+    // Must run after 'views' are calculated
+    const [hasResumed, setHasResumed] = useState(false);
+    useEffect(() => {
+        if (hasResumed || views.length === 0) return;
+
+        const shouldResume = settings ? settings.autoResume : true;
+        if (shouldResume && initialPage > 0) {
+            // Find view containing the initial page
+            const viewIdx = views.findIndex(v => v.indices.includes(initialPage));
+            if (viewIdx !== -1) {
+                setCurrentViewIndex(viewIdx);
+                setShowResumeToast(true);
+                setTimeout(() => setShowResumeToast(false), 5000);
+            }
+        }
+        setHasResumed(true);
+    }, [initialPage, views, settings, hasResumed]);
+
+    // 💾 Save Progress (Debounced)
+    useEffect(() => {
+        if (!id || !hasResumed) return;
+
+        const currentPage = views[currentViewIndex]?.indices[0] || 0;
+
+        const timer = setTimeout(() => {
+            fetch(`/umu/api/media/${id}/progress`, {
+                method: "POST",
+                body: JSON.stringify({ time: currentPage }),
+            }).catch(e => console.error("Failed to save page", e));
+        }, 1000);
+
+        return () => clearTimeout(timer);
+    }, [currentViewIndex, id, views, hasResumed]);
+
 
     // ⚡ Listen for External Actions (from Page Level)
     useEffect(() => {
@@ -488,6 +519,24 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
             ref={containerRef}
             className={`flex flex-col w-full h-full bg-black text-zinc-200 overflow-hidden relative select-none group/reader ${className || ''}`}
         >
+            {/* 💾 Resume Toast */}
+            {showResumeToast && (
+                <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[70] animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="bg-zinc-900/90 border border-pink-500/30 backdrop-blur-md text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-3">
+                        <span className="text-xs text-pink-200 font-bold">Resumed from Page {initialPage + 1}</span>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentViewIndex(0);
+                                setShowResumeToast(false);
+                            }}
+                            className="text-xs font-bold hover:text-white text-zinc-400 transition-colors flex items-center gap-1"
+                        >
+                            <span className="bg-white/10 p-1 rounded-full">↺</span> Start Over
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* 1️⃣ Header (Fullscreen Only) */}
             <header className={`absolute top-0 left-0 right-0 h-16 flex items-center justify-between px-4 bg-gradient-to-b from-black/90 to-transparent z-40 transition-transform duration-300 ${showUI && isFullscreen ? 'translate-y-0' : '-translate-y-full'}`}>
@@ -815,7 +864,7 @@ export default function MangaReader({ id, title, pages, backUrl, className }: Ma
 
                             {/* Emoji Picker (Simple) */}
                             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                                {(settings ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
+                                {(settings?.markerIcons ? JSON.parse(settings.markerIcons) : ["💦", "👄", "🍑", "🐄", "🦶", "💕", "🚀", "🛑"]).map((emoji: string) => (
                                     <button
                                         key={emoji}
                                         onClick={() => setMarkerIcon(emoji)}

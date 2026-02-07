@@ -110,6 +110,7 @@ export default async function MangaReaderPage({ params }: PageProps) {
                             pages={pages}
                             backUrl="/manga"
                             className="w-full h-full"
+                            initialPage={(item as any).lastPos || 0}
                         />
                     </div>
 
