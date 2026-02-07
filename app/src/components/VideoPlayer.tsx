@@ -61,6 +61,20 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         return () => window.removeEventListener("click", handleClick);
     }, []);
 
+    // 🧹 Cleanup on Unmount (Stop Audio Ghosting 👻)
+    useEffect(() => {
+        const videoElement = videoRef.current;
+
+        return () => {
+            if (videoElement) {
+                console.log("🧹 Stopping Video Playback (Unmount)");
+                videoElement.pause();
+                videoElement.removeAttribute('src');
+                videoElement.load();
+            }
+        };
+    }, []);
+
     // 🔁 AB Loop State
     const [loopStart, setLoopStart] = useState<number | null>(null);
     const [loopEnd, setLoopEnd] = useState<number | null>(null);
