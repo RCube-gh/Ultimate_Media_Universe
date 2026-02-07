@@ -64,7 +64,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         setTimeout(() => recentViewers.delete(id), 2000);
     }, [id]);
 
-    const { settings } = useSettings(); // Move up to be accessible
+    const { settings, loading: settingsLoading } = useSettings(); // Move up to be accessible
 
     const audioRef = useRef<HTMLAudioElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -83,12 +83,16 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const [showResumeToast, setShowResumeToast] = useState(false); // Resume Toast
 
-    // 💾 Progress Saving Helper
+    // 💾 Progress Saving Helper (Encodes Track Index)
     const lastSaveTimeRef = useRef(0);
-    const saveProgress = useCallback((time: number) => {
+    const saveProgress = useCallback((time: number, trackIdx: number) => {
+        // Encode track index in time (microseconds approach or large offset)
+        // Offset: 1,000,000 (allows ~277 hours per track, sufficient)
+        const encodedTime = (trackIdx * 1000000) + time;
+
         fetch(`/umu/api/media/${id}/progress`, {
             method: "POST",
-            body: JSON.stringify({ time }),
+            body: JSON.stringify({ time: encodedTime }),
         }).catch(e => console.error("Save progress failed", e));
         lastSaveTimeRef.current = time;
     }, [id]);
@@ -96,21 +100,58 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     // 💾 Resume Logic (On Mount)
     useEffect(() => {
         const audio = audioRef.current;
-        if (!audio) return;
+        if (!audio || settingsLoading) return; // Wait for settings
 
         // Check Settings
-        const shouldResume = settings ? settings.autoResume : true;
+        const shouldResume = settings ? settings.autoResume : false; // Default false if not set/loading finished? actually loading handled above
 
-        if (shouldResume && initialLastPos > 5) {
-            audio.currentTime = initialLastPos;
-            setCurrentTime(initialLastPos);
-            setShowResumeToast(true);
+        if (shouldResume && initialLastPos > 1) {
+            // Decode
+            const trackIdx = Math.floor(initialLastPos / 1000000);
+            const time = initialLastPos % 1000000;
 
-            // Hide toast after 8s
-            const timer = setTimeout(() => setShowResumeToast(false), 8000);
-            return () => clearTimeout(timer);
+            if (trackIdx >= 0 && trackIdx < tracks.length) {
+                setCurrentTrackIndex(trackIdx);
+                // We need to wait for track to change? 
+                // Setting state queues re-render. 
+                // We can set time immediately but audio.src needs to update first.
+                // React state update is batched.
+                // We might need a separate effect or just set it here assuming fast render.
+                // Actually, if we set track index, the audio src changes.
+                // We should store the 'pendingResumeTime' to apply after track loads.
+            }
+
+            if (time > 5) {
+                // Defer setting time until metadata loaded for new track?
+                // Or just set state
+                setCurrentTime(time);
+                // We will use a ref or effect to apply this to audio element once it's ready/src changes
+                setShowResumeToast(true);
+                setTimeout(() => setShowResumeToast(false), 8000);
+            }
         }
-    }, [initialLastPos, settings]);
+    }, [initialLastPos, settings, settingsLoading, tracks.length]);
+
+    // Apply Resume Time after Track Change
+    const pendingResumeApplied = useRef(false);
+    useEffect(() => {
+        // If we have a resume target and haven't applied it to the actual element
+        const audio = audioRef.current;
+        if (!audio || pendingResumeApplied.current) return;
+
+        const trackIdx = Math.floor(initialLastPos / 1000000);
+        const time = initialLastPos % 1000000;
+        const shouldResume = settings && settings.autoResume;
+
+        if (shouldResume && trackIdx === currentTrackIndex && time > 5) {
+            // Only apply if ready?
+            // We can try setting it.
+            if (Math.abs(audio.currentTime - time) > 1) {
+                audio.currentTime = time;
+                pendingResumeApplied.current = true;
+            }
+        }
+    }, [currentTrackIndex, initialLastPos, settings]);
 
     // 💾 Save on Interval & Pause
     useEffect(() => {
@@ -118,11 +159,11 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         const interval = setInterval(() => {
             const audio = audioRef.current;
             if (audio && Math.abs(audio.currentTime - lastSaveTimeRef.current) > 2) {
-                saveProgress(audio.currentTime);
+                saveProgress(audio.currentTime, currentTrackIndex);
             }
         }, 5000); // Check every 5s for audio
         return () => clearInterval(interval);
-    }, [isPlaying, saveProgress]);
+    }, [isPlaying, saveProgress, currentTrackIndex]);
 
 
 
@@ -338,7 +379,7 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
         const onPlay = () => setIsPlaying(true);
         const onPause = () => {
             setIsPlaying(false);
-            if (audio) saveProgress(audio.currentTime);
+            if (audio) saveProgress(audio.currentTime, currentTrackIndex);
         };
         const onEnded = () => {
             // AB Loop shouldn't hit ended technically if set correctly, but if loopEnd is end of track...

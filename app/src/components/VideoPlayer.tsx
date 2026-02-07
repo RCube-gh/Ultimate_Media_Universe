@@ -29,7 +29,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     const containerRef = useRef<HTMLDivElement>(null);
 
     // ⚙️ User Settings
-    const { settings } = useSettings();
+    const { settings, loading: settingsLoading } = useSettings();
 
     // 📊 Player State
     const [isPlaying, setIsPlaying] = useState(false);
@@ -601,9 +601,9 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
         // 2. Normal Resume (Check Settings)
         // 2. Normal Resume (Check Settings)
-        // Default to true if settings not loaded yet (or check loading state)
-        // Since settings connects to DB, we prefer it.
-        const shouldResume = settings ? settings.autoResume : true;
+        if (settingsLoading) return; // Wait
+
+        const shouldResume = settings ? settings.autoResume : false;
 
         if (shouldResume && initialLastPos > 5) {
             video.currentTime = initialLastPos;
@@ -614,7 +614,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             const timer = setTimeout(() => setShowResumeToast(false), 8000);
             return () => clearTimeout(timer);
         }
-    }, [initialLastPos, serverDuration, id, settings]);
+    }, [initialLastPos, serverDuration, id, settings, settingsLoading]);
 
     // 💾 Progress Saving Helper
     const saveProgress = useCallback((time: number) => {

@@ -39,8 +39,8 @@ export default function MangaReader({ id, title, pages, backUrl, className, init
         setTimeout(() => recentViewers.delete(id), 2000);
     }, [id]);
 
-    // ⚙️ Settings
-    const { settings } = useSettings();
+    // ⚙️ Settings with Loading Check
+    const { settings, loading: settingsLoading } = useSettings();
 
     // 📍 Markers
     const {
@@ -237,9 +237,10 @@ export default function MangaReader({ id, title, pages, backUrl, className, init
     // Must run after 'views' are calculated
     const [hasResumed, setHasResumed] = useState(false);
     useEffect(() => {
-        if (hasResumed || views.length === 0) return;
+        if (hasResumed || views.length === 0 || settingsLoading) return;
 
-        const shouldResume = settings ? settings.autoResume : true;
+        const shouldResume = settings ? settings.autoResume : false;
+
         if (shouldResume && initialPage > 0) {
             // Find view containing the initial page
             const viewIdx = views.findIndex(v => v.indices.includes(initialPage));
@@ -250,7 +251,7 @@ export default function MangaReader({ id, title, pages, backUrl, className, init
             }
         }
         setHasResumed(true);
-    }, [initialPage, views, settings, hasResumed]);
+    }, [initialPage, views, settings, settingsLoading, hasResumed]);
 
     // 💾 Save Progress (Debounced)
     useEffect(() => {
