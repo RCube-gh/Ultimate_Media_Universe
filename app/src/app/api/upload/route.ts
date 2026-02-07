@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
+import { createWriteStream } from "fs";
 import { join } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 import AdmZip from "adm-zip";
 import { scanMangaFolder, scanAudioFolder } from "@/lib/scanner"; // 1. Static Import
 
@@ -162,17 +165,17 @@ export async function POST(req: NextRequest) {
                     }
                 }
 
-                const bytes = await uploadedFile.arrayBuffer();
-                const buffer = Buffer.from(bytes);
-
-                // Save ZIP temp
+                // STREAM ZIP to Disk
                 const tempZipPath = join(uploadDir, `${Date.now()}_temp_${safeTitle}.zip`);
-                await writeFile(tempZipPath, buffer);
 
-                console.log("🔓 Extracting ZIP (from Buffer)...");
+                const stream = uploadedFile.stream();
+                const body = Readable.fromWeb(stream as any);
+                await pipeline(body, createWriteStream(tempZipPath));
+
+                console.log("🔓 Extracting ZIP (from File)...");
                 try {
-                    // Use Buffer directly to avoid File Lock issues!
-                    const zip = new AdmZip(buffer);
+                    // Use File Path to avoid memory load
+                    const zip = new AdmZip(tempZipPath);
                     zip.extractAllTo(itemDir, true);
                     console.log("✅ Extraction complete!");
                 } catch (err: any) {
@@ -239,14 +242,19 @@ export async function POST(req: NextRequest) {
             // If try to upload ZIP for Video/Link, it falls here (treated as file)
             // If Single Audio (not zip), it falls here.
 
-            console.log("🚚 Processing Main File Upload (Single File Mode)...");
-            const bytes = await mainFile.arrayBuffer();
-            const buffer = Buffer.from(bytes);
+            console.log("🚚 Processing Main File Upload (Stream Mode)...");
+            // Stream the file instead of buffering into memory to avoid 502/OOM errors on large files
+            const stream = mainFile.stream();
+            const body = Readable.fromWeb(stream as any); // Convert Web Stream to Node Stream
+
             const safeName = mainFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
             const fileName = `${Date.now()}_file_${safeName}`;
             const savePath = join(uploadDir, fileName);
 
-            await writeFile(savePath, buffer);
+            // Use imported createWriteStream
+            const fileStream = createWriteStream(savePath);
+            await pipeline(body, fileStream);
+
             filePath = `/api/file/uploads/${fileName}`;
             isArchived = true;
 
