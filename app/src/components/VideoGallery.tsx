@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Film, Play, CheckCircle2, Trash2, Tag, X } from "lucide-react";
+import { Film, Play, CheckCircle2, Trash2, Tag, X, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -15,6 +15,7 @@ interface VideoItem {
     createdAt: Date;
     duration: number | null;
     tags: { id: string, name: string }[];
+    status?: string; // READY, PROCESSING
 }
 
 export function VideoGallery({ items }: { items: VideoItem[] }) {
@@ -134,12 +135,15 @@ export function VideoGallery({ items }: { items: VideoItem[] }) {
                 {items.map((item) => {
                     const isSelected = selectedIds.has(item.id);
 
+                    const isProcessing = item.status === "PROCESSING";
+
                     return (
                         <Link
                             key={item.id}
-                            href={isSelectionMode ? "#" : `/videos/${item.id}`} // Disable link in selection mode
+                            href={(isSelectionMode || isProcessing) ? "#" : `/videos/${item.id}`} // Disable if selecting OR processing
                             onClick={(e) => {
                                 if (isSelectionMode) toggleSelection(item.id, e);
+                                else if (isProcessing) e.preventDefault();
                             }}
                             className={`group relative block bg-zinc-900 border rounded-xl overflow-hidden transition-all duration-300 transform ${isSelectionMode && isSelected
                                 ? "border-pink-500 ring-2 ring-pink-500/50 scale-95"
@@ -168,7 +172,7 @@ export function VideoGallery({ items }: { items: VideoItem[] }) {
                                         <img
                                             src={item.thumbnail?.startsWith("/") ? `/umu${item.thumbnail}` : item.thumbnail}
                                             alt={item.title}
-                                            className="absolute inset-0 w-full h-full object-contain z-10 transition-transform duration-500 group-hover:scale-105"
+                                            className={`absolute inset-0 w-full h-full object-contain z-10 transition-transform duration-500 ${isProcessing ? "opacity-50 grayscale" : "group-hover:scale-105"}`}
                                         />
                                     </>
                                 ) : (
@@ -177,8 +181,16 @@ export function VideoGallery({ items }: { items: VideoItem[] }) {
                                     </div>
                                 )}
 
-                                {/* ▶ Play Button Overlay (Only in View Mode) */}
-                                {!isSelectionMode && (
+                                {/* ⚙️ PROCESSING OVERLAY */}
+                                {isProcessing && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center z-30 bg-black/40 backdrop-blur-sm">
+                                        <Loader2 size={32} className="text-pink-500 animate-spin mb-2" />
+                                        <span className="text-xs font-bold text-white uppercase tracking-widest">Processing</span>
+                                    </div>
+                                )}
+
+                                {/* ▶ Play Button Overlay (Only in View Mode & Ready) */}
+                                {!isSelectionMode && !isProcessing && (
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
                                         <div className="w-16 h-16 rounded-full bg-pink-600 text-white flex items-center justify-center shadow-lg shadow-pink-600/40 transform scale-50 group-hover:scale-100 transition-transform duration-300">
                                             <Play size={32} fill="currentColor" className="ml-1" />

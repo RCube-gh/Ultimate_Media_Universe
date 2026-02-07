@@ -260,79 +260,91 @@ export async function POST(req: NextRequest) {
 
             if (type === "VIDEO") {
                 duration = await getVideoDuration(savePath);
-
-                if (duration) {
-                    // 🎞️ Trigger Sprite Gen
-                    try {
-                        const { createHash } = await import("crypto");
-                        const hash = createHash("md5").update(savePath).digest("hex");
-
-                        const spriteName = `${hash}_sprite.jpg`;
-                        // ThumbDir is defined above
-
-                        const PROCESS_ROOT = process.cwd();
-                        const CACHE_ROOT = join(PROCESS_ROOT, ".cache", "thumbnails");
-                        await mkdir(CACHE_ROOT, { recursive: true });
-
-                        const targetSpritePath = join(CACHE_ROOT, spriteName);
-
-                        // Run in background (don't await fully if you want fast response, but for now await to ensure it exists)
-                        // Actually, let's await it so the user sees it immediately.
-                        await generateSpriteSheet(savePath, targetSpritePath, duration);
-
-                        // 🖼️ Auto-Generate Thumbnail if missing
-                        if (!thumbnailPath) {
-                            console.log("🖼️ No manual thumbnail provided. Auto-generating from video...");
-                            const thumbName = `${hash}_thumb_auto.jpg`;
-                            const targetThumbPath = join(thumbDir, thumbName);
-
-                            try {
-                                // Extract frame at 20% or 5s, whichever is smaller but at least 1s
-                                const time = Math.min(Math.max(duration * 0.2, 1), 10);
-
-                                await execAsync(
-                                    `ffmpeg -y -ss ${time} -i "${savePath}" -vframes 1 -q:v 2 "${targetThumbPath}"`
-                                );
-
-                                thumbnailPath = `/api/file/thumbnails/${thumbName}`;
-                                console.log(`✅ Auto-Thumbnail Generated: ${thumbnailPath}`);
-                            } catch (e) {
-                                console.error("❌ Auto-Thumbnail Gen Failed:", e);
-                            }
-                        }
-
-                    } catch (e) {
-                        console.error("Failed to setup sprite/thumb generation", e);
-                    }
-                }
             } else if (type === "IMAGE") {
                 // 🖼️ For Image type, use the file itself as thumbnail if not provided
                 if (!thumbnailPath) {
                     thumbnailPath = filePath;
                 }
             }
-        }
 
-        // DB Create for Non-Manga (Single File)
-        if (type !== "MANGA") {
-            const newItem = await prisma.mediaItem.create({
-                data: {
-                    title,
-                    url: url || sourceUrl || null,
-                    type,
-                    description,
-                    isArchived,
-                    filePath,
-                    thumbnail: thumbnailPath,
-                    size: mainFile ? BigInt(mainFile.size) : null,
-                    duration,
-                    tags: tagData, // Add Tags!
-                },
-            });
-            console.log("✅ Success! Item ID:", newItem.id);
-        }
+            // 3️⃣ DB Create (Initial - Status PROCESSING)
+            let newItem;
+            if (type !== "MANGA") {
+                newItem = await prisma.mediaItem.create({
+                    data: {
+                        title,
+                        url: url || sourceUrl || null,
+                        type,
+                        description,
+                        isArchived,
+                        filePath,
+                        thumbnail: thumbnailPath, // Maybe null initially if auto-gen needed
+                        size: mainFile ? BigInt(mainFile.size) : null,
+                        duration,
+                        status: (type === "VIDEO" && !thumbnailPath) ? "PROCESSING" : "READY", // Only video needs processing typically
+                        tags: tagData,
+                    },
+                });
+                console.log("✅ Created Item (Processing):", newItem.id);
 
-        return NextResponse.json({ success: true, message: "Upload Complete! 💓" });
+                // ⚡ Background Processing (Fire & Forget)
+                if (type === "VIDEO" && duration) {
+                    (async () => {
+                        try {
+                            console.log("⚡ Starting Background Processing for:", newItem.id);
+                            const { createHash } = await import("crypto");
+                            const hash = createHash("md5").update(savePath).digest("hex");
+
+                            // 1. Sprite Sheet
+                            const spriteName = `${hash}_sprite.jpg`;
+                            const PROCESS_ROOT = process.cwd();
+                            const CACHE_ROOT = join(PROCESS_ROOT, ".cache", "thumbnails");
+                            await mkdir(CACHE_ROOT, { recursive: true });
+                            const targetSpritePath = join(CACHE_ROOT, spriteName);
+
+                            await generateSpriteSheet(savePath, targetSpritePath, duration!);
+
+                            // 2. Auto-Thumbnail (if needed)
+                            let finalThumbPath = thumbnailPath;
+                            if (!finalThumbPath) {
+                                console.log("🖼️ Auto-generating thumbnail...");
+                                const thumbName = `${hash}_thumb_auto.jpg`;
+                                const targetThumbPath = join(thumbDir, thumbName);
+                                // Extract at 20% or 5s
+                                const time = Math.min(Math.max(duration! * 0.2, 1), 10);
+                                try {
+                                    await execAsync(`ffmpeg -y -ss ${time} -i "${savePath}" -vframes 1 -q:v 2 "${targetThumbPath}"`);
+                                    finalThumbPath = `/api/file/thumbnails/${thumbName}`;
+                                } catch (e) {
+                                    console.error("❌ Auto-Thumbnail Failed", e);
+                                }
+                            }
+
+                            // 3. Update Status to READY
+                            await prisma.mediaItem.update({
+                                where: { id: newItem.id },
+                                data: {
+                                    status: "READY",
+                                    thumbnail: finalThumbPath
+                                }
+                            });
+                            console.log("✅ Background Processing Complete!", newItem.id);
+                        } catch (bgError) {
+                            console.error("❌ Background Processing Failed", bgError);
+                            // Mark as READY anyway so it's viewable (just missing sprite/thumb)
+                            await prisma.mediaItem.update({
+                                where: { id: newItem!.id },
+                                data: { status: "READY" }
+                            });
+                        }
+                    })();
+                }
+            }
+
+
+
+            return NextResponse.json({ success: true, message: "Upload Complete! 💓" });
+        } // Close else if (mainFile)
 
     } catch (e: any) {
         console.error("💥 General API Error:", e);
