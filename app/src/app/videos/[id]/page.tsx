@@ -56,7 +56,12 @@ export default async function VideoPlayerPage(props: Props) {
     // 🔀 Shuffle and Limit
     const recommendations = candidates.sort(() => Math.random() - 0.5).slice(0, 10);
 
-    const src = item.filePath || item.url;
+    let src = item.filePath || item.url;
+    if (src?.startsWith("/")) src = `/umu${src}`;
+
+    let poster = item.thumbnail;
+    if (poster?.startsWith("/")) poster = `/umu${poster}`;
+
     if (!src) return <div className="p-8">No source found.</div>;
 
     return (
@@ -77,7 +82,7 @@ export default async function VideoPlayerPage(props: Props) {
                         <VideoPlayer
                             id={item.id}
                             src={src}
-                            poster={item.thumbnail || undefined}
+                            poster={poster || undefined}
                             className="w-full h-full"
                             initialLastPos={(item as any).lastPos}
                             serverDuration={item.duration || 0}

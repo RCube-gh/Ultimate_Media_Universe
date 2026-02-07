@@ -138,7 +138,8 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     // 🧬 Fetch Markers
     useEffect(() => {
         if (!id) return;
-        fetch(`/api/media/${id}/markers`)
+        if (!id) return;
+        fetch(`/umu/api/media/${id}/markers`)
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) setMarkers(data);
@@ -152,7 +153,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         setMarkers(prev => prev.filter(m => m.id !== markerId));
 
         try {
-            await fetch(`/api/markers/${markerId}`, { method: "DELETE" });
+            await fetch(`/umu/api/markers/${markerId}`, { method: "DELETE" });
 
             // Trigger Event for Stats Update
             const event = new CustomEvent("fapflix-trigger-action", {
@@ -166,7 +167,6 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         }
     };
 
-    // ✨ Overlay Feedback State
     // ✨ Overlay Feedback State
     const [feedbackState, setFeedbackState] = useState<{ content: React.ReactNode, mode?: "default" | "fullscreen", isExiting?: boolean } | null>(null);
     const feedbackTimeoutRef = useRef<NodeJS.Timeout>(null);
@@ -253,6 +253,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     }, [triggerFeedback]);
 
     // 💾 Save Marker
+    // 💾 Save Marker
     const saveMarker = async () => {
         if (!videoRef.current || !id) return;
 
@@ -263,7 +264,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         const newMarker = { time, label: currentLabel, icon: currentIcon };
 
         try {
-            const res = await fetch(`/api/media/${id}/markers`, {
+            const res = await fetch(`/umu/api/media/${id}/markers`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(newMarker),
@@ -590,7 +591,8 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             video.currentTime = 0;
             setCurrentTime(0);
             // Optional: Update DB to 0 immediately so it sticks
-            fetch(`/api/media/${id}/progress`, {
+            // Optional: Update DB to 0 immediately so it sticks
+            fetch(`/umu/api/media/${id}/progress`, {
                 method: "POST",
                 body: JSON.stringify({ time: 0 }),
             }).catch(console.error);
@@ -621,7 +623,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
     // 💾 Progress Saving Helper
     const saveProgress = useCallback((time: number) => {
-        fetch(`/api/media/${id}/progress`, {
+        fetch(`/umu/api/media/${id}/progress`, {
             method: "POST",
             body: JSON.stringify({ time }),
         }).catch(e => console.error("Save progress failed", e));
@@ -645,7 +647,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         if (recentViewers.has(id)) return;
 
         recentViewers.add(id);
-        fetch(`/api/media/${id}/view`, { method: "POST" }).catch(console.error);
+        fetch(`/umu/api/media/${id}/view`, { method: "POST" }).catch(console.error);
 
         // Allow counting again after 2 seconds (e.g. if user refreshes manually)
         setTimeout(() => recentViewers.delete(id), 2000);
@@ -661,7 +663,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             const time = video.currentTime;
 
             // 1. Save Marker
-            fetch(`/api/media/${id}/markers`, {
+            fetch(`/umu/api/media/${id}/markers`, {
                 method: "POST",
                 body: JSON.stringify({
                     time,
@@ -670,7 +672,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                 })
             }).then(() => {
                 // 2. Refresh Markers
-                fetch(`/api/media/${id}/markers`)
+                fetch(`/umu/api/media/${id}/markers`)
                     .then(r => r.json())
                     .then(data => setMarkers(data));
             });
