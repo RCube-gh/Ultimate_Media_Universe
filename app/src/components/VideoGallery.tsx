@@ -187,9 +187,7 @@ export function VideoGallery({ items }: { items: VideoItem[] }) {
                                 )}
 
                                 {/* 🏷️ Type Badge */}
-                                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded border border-white/10 uppercase z-20">
-                                    VIDEO
-                                </div>
+
                             </div>
 
                             {/* 📝 Info Area */}
