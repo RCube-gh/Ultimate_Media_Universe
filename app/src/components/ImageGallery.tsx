@@ -69,7 +69,7 @@ export function ImageGallery({ items }: { items: ImageItem[] }) {
     const handleBatchDelete = async () => {
         if (!confirm(`⚠️ Are you sure you want to delete ${selectedIds.size} items?\nThis action cannot be undone.`)) return;
         try {
-            await axios.post("/api/batch/delete", { ids: Array.from(selectedIds) });
+            await axios.post("/umu/api/batch/delete", { ids: Array.from(selectedIds) });
             setSelectedIds(new Set());
             setIsSelectionMode(false);
             router.refresh(); // Refresh page data
@@ -88,7 +88,7 @@ export function ImageGallery({ items }: { items: ImageItem[] }) {
         if (tagsToAdd.length === 0) return;
 
         try {
-            await axios.post("/api/batch/tags", {
+            await axios.post("/umu/api/batch/tags", {
                 ids: Array.from(selectedIds),
                 action: tagMode,
                 tags: tagsToAdd.map(t => t.name)
@@ -164,7 +164,7 @@ export function ImageGallery({ items }: { items: ImageItem[] }) {
                             {item.thumbnail || item.filePath ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
-                                    src={item.thumbnail || item.filePath || ""}
+                                    src={(item.thumbnail || item.filePath)?.startsWith("/") ? `/umu${item.thumbnail || item.filePath}` : (item.thumbnail || item.filePath || "")}
                                     alt={item.title}
                                     className={`w-full h-full object-cover transition-transform duration-500 ${!isSelectionMode && "group-hover:scale-110"
                                         } ${isSelectionMode && isSelected ? "opacity-60" : ""}`}
@@ -270,8 +270,8 @@ export function ImageGallery({ items }: { items: ImageItem[] }) {
                                 onClick={confirmBatchTags}
                                 disabled={tagsToAdd.length === 0}
                                 className={`px-5 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg ${tagMode === 'add'
-                                        ? "bg-pink-600 hover:bg-pink-500 hover:shadow-pink-500/20"
-                                        : "bg-red-600 hover:bg-red-500 hover:shadow-red-500/20"
+                                    ? "bg-pink-600 hover:bg-pink-500 hover:shadow-pink-500/20"
+                                    : "bg-red-600 hover:bg-red-500 hover:shadow-red-500/20"
                                     }`}
                             >
                                 {tagMode === 'add' ? "Apply Tags" : "Remove Tags"}
@@ -321,7 +321,7 @@ function LightboxModal({
                 <div className="relative w-full h-full flex items-center justify-center p-4">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                        src={item.filePath || item.thumbnail || ""}
+                        src={(item.filePath || item.thumbnail)?.startsWith("/") ? `/umu${item.filePath || item.thumbnail}` : (item.filePath || item.thumbnail || "")}
                         alt={item.title}
                         className="w-auto h-auto max-w-full max-h-[80vh] object-contain shadow-2xl drop-shadow-2xl cursor-default"
                         onClick={(e) => e.stopPropagation()}

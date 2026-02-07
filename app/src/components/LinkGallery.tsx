@@ -51,7 +51,7 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
     const handleBatchDelete = async () => {
         if (!confirm(`⚠️ Are you sure you want to delete ${selectedIds.size} items?\nThis action cannot be undone.`)) return;
         try {
-            await axios.post("/api/batch/delete", { ids: Array.from(selectedIds) });
+            await axios.post("/umu/api/batch/delete", { ids: Array.from(selectedIds) });
             setSelectedIds(new Set());
             setIsSelectionMode(false);
             router.refresh();
@@ -70,7 +70,7 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
         if (tagsToAdd.length === 0) return;
 
         try {
-            await axios.post("/api/batch/tags", {
+            await axios.post("/umu/api/batch/tags", {
                 ids: Array.from(selectedIds),
                 action: tagMode,
                 tags: tagsToAdd.map(t => t.name)
@@ -150,7 +150,7 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
                                 {link.thumbnail ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
-                                        src={link.thumbnail}
+                                        src={link.thumbnail.startsWith("/") ? `/umu${link.thumbnail}` : link.thumbnail}
                                         alt={link.title}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     />

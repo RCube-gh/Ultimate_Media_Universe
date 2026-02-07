@@ -52,7 +52,7 @@ export function MangaGallery({ items }: { items: MangaItem[] }) {
     const handleBatchDelete = async () => {
         if (!confirm(`⚠️ Are you sure you want to delete ${selectedIds.size} items?\nThis action cannot be undone.`)) return;
         try {
-            await axios.post("/api/batch/delete", { ids: Array.from(selectedIds) });
+            await axios.post("/umu/api/batch/delete", { ids: Array.from(selectedIds) });
             setSelectedIds(new Set());
             setIsSelectionMode(false);
             router.refresh();
@@ -71,7 +71,7 @@ export function MangaGallery({ items }: { items: MangaItem[] }) {
         if (tagsToAdd.length === 0) return;
 
         try {
-            await axios.post("/api/batch/tags", {
+            await axios.post("/umu/api/batch/tags", {
                 ids: Array.from(selectedIds),
                 action: tagMode,
                 tags: tagsToAdd.map(t => t.name)
@@ -118,8 +118,8 @@ export function MangaGallery({ items }: { items: MangaItem[] }) {
                             setSelectedIds(new Set());
                         }}
                         className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${isSelectionMode
-                                ? "bg-pink-600 text-white shadow-lg shadow-pink-500/20"
-                                : "bg-zinc-800 text-zinc-400 hover:text-white"
+                            ? "bg-pink-600 text-white shadow-lg shadow-pink-500/20"
+                            : "bg-zinc-800 text-zinc-400 hover:text-white"
                             }`}
                     >
                         {isSelectionMode ? <CheckCircle2 size={16} /> : <CheckCircle2 size={16} />}
@@ -144,8 +144,8 @@ export function MangaGallery({ items }: { items: MangaItem[] }) {
                         >
                             {/* Cover Art */}
                             <div className={`aspect-[2/3] rounded-xl bg-zinc-800 border transition-all overflow-hidden relative shadow-lg duration-300 ${isSelectionMode && isSelected
-                                    ? "border-pink-500 ring-2 ring-pink-500/50 scale-95"
-                                    : "border-zinc-800 group-hover:border-pink-500/50 group-hover:shadow-pink-500/10 group-hover:-translate-y-1"
+                                ? "border-pink-500 ring-2 ring-pink-500/50 scale-95"
+                                : "border-zinc-800 group-hover:border-pink-500/50 group-hover:shadow-pink-500/10 group-hover:-translate-y-1"
                                 }`}>
                                 {/* Selection Checkbox Overlay */}
                                 {isSelectionMode && (
@@ -158,7 +158,7 @@ export function MangaGallery({ items }: { items: MangaItem[] }) {
                                 {item.thumbnail ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
-                                        src={item.thumbnail}
+                                        src={item.thumbnail.startsWith("/") ? `/umu${item.thumbnail}` : item.thumbnail}
                                         alt={item.title}
                                         className={`w-full h-full object-cover transition-transform duration-300 ${!isSelectionMode && "group-hover:scale-105"
                                             } ${isSelectionMode && isSelected ? "opacity-60" : ""}`}
@@ -283,8 +283,8 @@ export function MangaGallery({ items }: { items: MangaItem[] }) {
                                 onClick={confirmBatchTags}
                                 disabled={tagsToAdd.length === 0}
                                 className={`px-5 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg ${tagMode === 'add'
-                                        ? "bg-pink-600 hover:bg-pink-500 hover:shadow-pink-500/20"
-                                        : "bg-red-600 hover:bg-red-500 hover:shadow-red-500/20"
+                                    ? "bg-pink-600 hover:bg-pink-500 hover:shadow-pink-500/20"
+                                    : "bg-red-600 hover:bg-red-500 hover:shadow-red-500/20"
                                     }`}
                             >
                                 {tagMode === 'add' ? "Apply Tags" : "Remove Tags"}
