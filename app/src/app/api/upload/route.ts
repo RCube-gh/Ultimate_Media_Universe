@@ -75,7 +75,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, message: "Title and Type are required!" }, { status: 400 });
         }
 
-        const projectRoot = join(process.cwd(), "..");
+        // Docker: /app/library (Mounted at /app/library)
+        const projectRoot = process.cwd();
         const libraryDir = join(projectRoot, "library");
         const uploadDir = join(libraryDir, "uploads");
         const thumbDir = join(libraryDir, "thumbnails");

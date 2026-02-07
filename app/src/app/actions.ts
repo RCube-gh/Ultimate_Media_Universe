@@ -57,7 +57,10 @@ export async function addMediaItem(prevState: AddItemState, formData: FormData):
 
         // 📂 Ensure directories exist outside of app for Docker compatibility
         // Path: /library (Parent of app)
-        const projectRoot = join(process.cwd(), "..");
+        // Path: app/library (Parent of app if local, but in Docker it is mounted at /app/library)
+        // Check Dockerfile CMD: WORKDIR /app
+        // So process.cwd() is /app
+        const projectRoot = process.cwd();
         const libraryDir = join(projectRoot, "library");
 
         const uploadDir = join(libraryDir, "uploads");
