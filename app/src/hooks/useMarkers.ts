@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSettings } from "@/hooks/useSettings";
 
 export type Marker = {
     id: string;
@@ -8,10 +9,23 @@ export type Marker = {
 };
 
 export function useMarkers(itemId: string | undefined) {
+    const { settings } = useSettings();
     const [markers, setMarkers] = useState<Marker[]>([]);
     const [isMarkerModalOpen, setIsMarkerModalOpen] = useState(false);
     const [markerLabel, setMarkerLabel] = useState("");
     const [markerIcon, setMarkerIcon] = useState("💦");
+
+    // ⚙️ Sync Default Marker Icon with Settings
+    useEffect(() => {
+        if (settings?.markerIcons) {
+            try {
+                const icons = JSON.parse(settings.markerIcons);
+                if (Array.isArray(icons) && icons.length > 0) {
+                    setMarkerIcon(icons[0]);
+                }
+            } catch (e) { console.error("Failed to parse marker icons setting", e); }
+        }
+    }, [settings]);
 
     // 🧬 Fetch Markers
     useEffect(() => {

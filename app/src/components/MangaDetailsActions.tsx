@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ThumbsUp, Heart, MoreHorizontal } from "lucide-react";
+import { useSettings } from "@/hooks/useSettings";
 
 type MangaDetailsActionsProps = {
     id: string;
@@ -14,21 +15,16 @@ export function MangaDetailsActions({ id, initialLikes = 0, initialIsFavorite = 
     const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
     const [likeAnimating, setLikeAnimating] = useState(false);
     const [actionConfig, setActionConfig] = useState({ label: "Highlight", icon: "✨" });
+    const { settings } = useSettings();
 
     useEffect(() => {
-        const saved = localStorage.getItem("fapflix-config");
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (parsed.actionButtonLabel) {
-                    setActionConfig({
-                        label: parsed.actionButtonLabel,
-                        icon: parsed.actionButtonIcon || "✨"
-                    });
-                }
-            } catch (e) { /* ignore */ }
+        if (settings) {
+            setActionConfig({
+                label: settings.quickActionLabel || "Highlight",
+                icon: settings.quickActionIcon || "✨"
+            });
         }
-    }, []);
+    }, [settings]);
 
     const handleQuickAction = () => {
         // Dispatch Custom Event to Player

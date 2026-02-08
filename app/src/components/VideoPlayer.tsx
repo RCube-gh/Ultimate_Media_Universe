@@ -54,6 +54,18 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     const [markerLabel, setMarkerLabel] = useState("");
     const [markerIcon, setMarkerIcon] = useState("💦"); // Default
 
+    // ⚙️ Sync Default Marker Icon with Settings
+    useEffect(() => {
+        if (settings?.markerIcons) {
+            try {
+                const icons = JSON.parse(settings.markerIcons);
+                if (Array.isArray(icons) && icons.length > 0) {
+                    setMarkerIcon(icons[0]);
+                }
+            } catch (e) { console.error("Failed to parse marker icons setting", e); }
+        }
+    }, [settings]);
+
     // 🌐 Close Context Menu on Click
     useEffect(() => {
         const handleClick = () => setContextMenu(null);

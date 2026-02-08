@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ThumbsUp, Heart, MoreHorizontal } from "lucide-react";
+import { useSettings } from "@/hooks/useSettings";
 
 type VideoActionsProps = {
     id: string;
@@ -14,30 +15,19 @@ export function VideoActions({ id, initialLikes, initialIsFavorite }: VideoActio
     const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
     const [likeAnimating, setLikeAnimating] = useState(false);
 
+    const { settings } = useSettings();
+
     // Quick Action Config & State
     const [actionConfig, setActionConfig] = useState({ label: "Highlight", icon: "✨" });
 
     useEffect(() => {
-        const loadConfig = () => {
-            // 1. Load Config
-            const saved = localStorage.getItem("fapflix-config");
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    if (parsed.actionButtonLabel) {
-                        setActionConfig({
-                            label: parsed.actionButtonLabel,
-                            icon: parsed.actionButtonIcon || "✨"
-                        });
-                    }
-                } catch (e) { console.error(e); }
-            }
-        };
-
-        loadConfig();
-        window.addEventListener("storage", loadConfig);
-        return () => window.removeEventListener("storage", loadConfig);
-    }, []);
+        if (settings) {
+            setActionConfig({
+                label: settings.quickActionLabel || "Highlight",
+                icon: settings.quickActionIcon || "✨"
+            });
+        }
+    }, [settings]);
 
     const handleQuickAction = () => {
         // Dispatch Custom Event to Player

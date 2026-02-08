@@ -274,6 +274,18 @@ export default function AudioPlayer({ id, tracks, images = [], title, descriptio
     const [markerLabel, setMarkerLabel] = useState("");
     const [markerIcon, setMarkerIcon] = useState("💦");
 
+    // ⚙️ Sync Default Marker Icon with Settings
+    useEffect(() => {
+        if (settings?.markerIcons) {
+            try {
+                const icons = JSON.parse(settings.markerIcons);
+                if (Array.isArray(icons) && icons.length > 0) {
+                    setMarkerIcon(icons[0]);
+                }
+            } catch (e) { console.error("Failed to parse marker icons setting", e); }
+        }
+    }, [settings]);
+
     // 🧬 Fetch Markers
     useEffect(() => {
         if (!id) return;
