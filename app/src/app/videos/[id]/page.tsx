@@ -91,14 +91,13 @@ export default async function VideoPlayerPage(props: Props) {
                     {/* 🎞️ Player Container (Wrapper for Aspect Ratio) */}
                     <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl shadow-black border border-zinc-800 relative z-10">
                         <VideoPlayer
+                            key={item.id}
                             id={item.id}
                             src={src}
                             poster={poster || undefined}
                             className="w-full h-full"
                             initialLastPos={(item as any).lastPos}
                             serverDuration={item.duration || 0}
-                        // Force HMR update 2
-                        // Force HMR update 3 matches user timestamp 15:11
                         />
                     </div>
 

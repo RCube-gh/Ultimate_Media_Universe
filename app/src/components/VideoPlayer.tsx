@@ -81,8 +81,9 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             if (videoElement) {
                 console.log("🧹 Stopping Video Playback (Unmount)");
                 videoElement.pause();
-                videoElement.removeAttribute('src');
-                videoElement.load();
+                videoElement.removeAttribute('src'); // Helper for React
+                videoElement.src = ""; // Force browser to stop download
+                videoElement.load(); // Reset element
             }
         };
     }, []);
