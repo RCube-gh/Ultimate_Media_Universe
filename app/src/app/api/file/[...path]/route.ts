@@ -77,9 +77,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
         if (range) {
             const parts = range.replace(/bytes=/, "").split("-");
             const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+            // 🚀 Optimized Chunking Strategy for Raspberry Pi
+            // Instead of streaming the whole file (which chokes the Pi), 
+            // we send small, manageable chunks (e.g., 2MB).
+            const MAX_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+            const fileSizeRemaining = fileSize - 1;
+
+            let end = parts[1] ? parseInt(parts[1], 10) : fileSizeRemaining;
+
+            // Cap the chunk size to prevent memory pressure / connection timeout
+            if (end - start > MAX_CHUNK_SIZE) {
+                end = start + MAX_CHUNK_SIZE;
+            }
+
+            // Ensure we don't exceed file size
+            if (end > fileSizeRemaining) {
+                end = fileSizeRemaining;
+            }
+
             const chunksize = (end - start) + 1;
-            const fileStream = fs.createReadStream(fullPath, { start, end });
+
+            // Increased buffer for better throughput
+            const fileStream = fs.createReadStream(fullPath, {
+                start,
+                end,
+                highWaterMark: 512 * 1024 // 512KB buffer 
+            });
 
             return new NextResponse(fileStream as any, {
                 status: 206,
@@ -88,12 +112,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
                     "Accept-Ranges": "bytes",
                     "Content-Length": chunksize.toString(),
                     "Content-Type": contentType,
-                    "Cache-Control": "public, max-age=31536000, immutable", // Optional: long cache
+                    "Cache-Control": "public, max-age=31536000, immutable",
                 },
             });
         } else {
-            // Full Stream
-            const fileStream = fs.createReadStream(fullPath);
+            // Full Stream (Fallback)
+            const fileStream = fs.createReadStream(fullPath, {
+                highWaterMark: 512 * 1024
+            });
             return new NextResponse(fileStream as any, {
                 status: 200,
                 headers: {
