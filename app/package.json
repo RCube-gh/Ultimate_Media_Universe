@@ -11,8 +11,10 @@
     },
     "dependencies": {
         "@types/adm-zip": "^0.5.7",
+        "@types/busboy": "^1.5.4",
         "adm-zip": "^0.5.16",
         "axios": "^1.13.2",
+        "busboy": "^1.6.0",
         "date-fns": "^4.1.0",
         "emoji-picker-react": "^4.17.1",
         "jszip": "^3.10.1",
