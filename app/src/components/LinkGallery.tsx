@@ -17,8 +17,15 @@ interface LinkItem {
     tags: { id: string, name: string }[];
 }
 
-export function LinkGallery({ items }: { items: LinkItem[] }) {
+interface LinkGalleryProps {
+    items: LinkItem[];
+    initialSort?: string;
+}
+
+export function LinkGallery({ items, initialSort = "latest" }: LinkGalleryProps) {
     const router = useRouter();
+
+    const [sortOpen, setSortOpen] = useState(false);
 
     // ⚡ Batch Selection State
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -28,6 +35,23 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
     const [isTagModalOpen, setIsTagModalOpen] = useState(false);
     const [tagsToAdd, setTagsToAdd] = useState<{ id: string, name: string }[]>([]);
     const [tagMode, setTagMode] = useState<'add' | 'remove'>('add');
+
+    // Sort Options for Links 🔗
+    const sortOptions = [
+        { id: 'latest', label: 'Newest (Default)', icon: '🕒' },
+        { id: 'oldest', label: 'Oldest', icon: '🕰️' },
+        { id: 'title', label: 'A-Z', icon: '🔤' },
+        { id: 'title_desc', label: 'Z-A', icon: '🔠' },
+    ];
+
+    const currentSort = sortOptions.find(o => o.id === initialSort) || sortOptions[0];
+
+    const handleSort = (sortId: string) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("sort", sortId);
+        router.replace(url.toString());
+        setSortOpen(false);
+    };
 
     // 🖱️ Selection Handlers
     const toggleSelection = (id: string, e: React.MouseEvent) => {
@@ -86,7 +110,7 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
         }
     };
 
-    if (items.length === 0) {
+    if (items.length === 0 && initialSort === "latest") {
         return (
             <div className="h-[60vh] flex flex-col items-center justify-center text-zinc-500 border-2 border-dashed border-zinc-800 rounded-3xl bg-zinc-900/20">
                 <Globe className="w-16 h-16 mb-4 opacity-20" />
@@ -106,6 +130,37 @@ export function LinkGallery({ items }: { items: LinkItem[] }) {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* 🔃 Sort Dropdown */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setSortOpen(!sortOpen)}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"
+                        >
+                            <span className="text-lg">{currentSort.icon}</span>
+                            <span className="hidden sm:inline">{currentSort.label}</span>
+                        </button>
+
+                        {sortOpen && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
+                                <div className="absolute right-0 top-full mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col py-1">
+                                    {sortOptions.map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => handleSort(opt.id)}
+                                            className={`px-4 py-3 text-left text-sm font-medium flex items-center gap-3 hover:bg-pink-500/10 hover:text-pink-400 transition-colors ${initialSort === opt.id ? 'text-pink-500 bg-pink-500/5' : 'text-zinc-300'}`}
+                                        >
+                                            <span className="text-xl w-6 text-center">{opt.icon}</span>
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="w-px h-6 bg-zinc-700 mx-1" />
+
                     <button
                         onClick={() => {
                             setIsSelectionMode(!isSelectionMode);

@@ -11,8 +11,9 @@ interface Props {
 }
 
 export default async function AudioCatalogPage({ searchParams }: Props) {
-    const { q } = await searchParams;
+    const { q, sort } = await searchParams;
     const query = typeof q === 'string' ? q : undefined;
+    const sortType = typeof sort === 'string' ? sort : "latest";
 
     const where: any = { type: "AUDIO" };
     if (query) {
@@ -24,16 +25,31 @@ export default async function AudioCatalogPage({ searchParams }: Props) {
     }
 
     // 🎧 Fetch ONLY Audio items with Search
-    const audios = await prisma.mediaItem.findMany({
+    let audios = await prisma.mediaItem.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        // No orderBy here
         include: { tags: true }
+    });
+
+    // 🧠 Sort Logic
+    audios = audios.sort((a, b) => {
+        switch (sortType) {
+            case "oldest":
+                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            case "title":
+                return a.title.localeCompare(b.title);
+            case "title_desc":
+                return b.title.localeCompare(a.title);
+            case "latest":
+            default:
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
     });
 
     return (
         <div className="p-8 space-y-8 pb-32">
             {/* Header */}
-            <header className="flex items-end justify-between border-b border-zinc-800 pb-6 animate-in slide-in-from-top-4 duration-500">
+            <header className="flex flex-col md:flex-row md:items-end justify-between border-b border-zinc-800 pb-6 animate-in slide-in-from-top-4 duration-500 gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
                         <Headphones className="text-pink-500 w-8 h-8" />
@@ -48,7 +64,7 @@ export default async function AudioCatalogPage({ searchParams }: Props) {
                 </Link>
             </header>
 
-            <AudioGallery items={audios as any} />
+            <AudioGallery items={audios as any} initialSort={sortType} />
         </div>
     );
 }

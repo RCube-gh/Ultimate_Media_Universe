@@ -4,9 +4,10 @@ import { LinkGallery } from "@/components/LinkGallery";
 
 export const dynamic = "force-dynamic";
 
-export default async function LinksPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-    const { q } = await searchParams;
+export default async function LinksPage({ searchParams }: { searchParams: Promise<{ q?: string, sort?: string }> }) {
+    const { q, sort } = await searchParams;
     const query = q || "";
+    const sortType = sort || "latest";
 
     const where: any = { type: "LINK" };
     if (query) {
@@ -18,24 +19,39 @@ export default async function LinksPage({ searchParams }: { searchParams: Promis
     }
 
     // 🧠 脳みそから「LINK」タイプのアイテムだけ取ってくる！ (検索付き)
-    const links = await prisma.mediaItem.findMany({
+    let links = await prisma.mediaItem.findMany({
         where,
-        orderBy: { createdAt: "desc" },
-        include: { tags: true } // Include tags for the gallery filters
+        // Manual Sort
+        include: { tags: true }
     });
+
+    // 🧠 Sort Logic
+    links = links.sort((a, b) => {
+        switch (sortType) {
+            case "oldest":
+                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            case "title":
+                return a.title.localeCompare(b.title);
+            case "title_desc":
+                return b.title.localeCompare(a.title);
+            case "latest":
+            default:
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+    });
+
 
     return (
         <div className="p-8 space-y-8">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <h1 className="text-3xl font-bold flex items-center gap-3">
                     <Globe className="text-pink-500" />
                     <span>Web Bookmarks</span>
-                    {/* Count handled by Gallery or hidden here if gallery shows it */}
                 </h1>
-            </div>
+            </header>
 
-            <LinkGallery items={links as any} />
+            <LinkGallery items={links as any} initialSort={sortType} />
         </div>
     );
 }
