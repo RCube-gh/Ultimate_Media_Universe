@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Film, Play, CheckCircle2, Trash2, Tag, X, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { TagEditor } from "./TagEditor";
 
@@ -25,6 +25,8 @@ interface VideoGalleryProps {
 
 export function VideoGallery({ items, initialSort = "latest" }: VideoGalleryProps) {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const activeSort = searchParams.get("sort") || initialSort;
 
     const [sortOpen, setSortOpen] = useState(false);
 
@@ -50,11 +52,27 @@ export function VideoGallery({ items, initialSort = "latest" }: VideoGalleryProp
         { id: 'title_desc', label: 'Z-A', icon: '🔠' },
     ];
 
-    const currentSort = sortOptions.find(o => o.id === initialSort) || sortOptions[0];
+    const currentSort = sortOptions.find(o => o.id === activeSort) || sortOptions[0];
+
+    // 💾 Persist Sort Preference
+    useEffect(() => {
+        const urlSort = searchParams.get("sort");
+        if (urlSort) {
+            localStorage.setItem("umu_sort_order", urlSort);
+        } else {
+            const savedSort = localStorage.getItem("umu_sort_order");
+            if (savedSort && sortOptions.some(o => o.id === savedSort) && savedSort !== "latest") {
+                const url = new URL(window.location.href);
+                url.searchParams.set("sort", savedSort);
+                router.replace(url.toString());
+            }
+        }
+    }, [searchParams, router]);
 
     const handleSort = (sortId: string) => {
         const url = new URL(window.location.href);
         url.searchParams.set("sort", sortId);
+        localStorage.setItem("umu_sort_order", sortId);
         router.replace(url.toString());
         setSortOpen(false);
     };
