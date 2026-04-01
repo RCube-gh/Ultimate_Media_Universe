@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { ChevronLeft, Calendar, Clock, Share2, List, Play, Eye } from "lucide-react";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { MediaInfo } from "@/components/MediaInfo";
@@ -116,7 +115,7 @@ export default async function VideoPlayerPage(props: Props) {
                     <div className="flex flex-col gap-3">
                         <h3 className="font-bold text-sm text-zinc-400 px-1">Up Next</h3>
                         {recommendations.map((rec) => (
-                            <Link key={rec.id} href={`/videos/${rec.id}`} className="flex gap-2 group p-2 rounded-xl hover:bg-white/5 transition-colors">
+                            <a key={rec.id} href={`/umu/videos/${rec.id}`} className="flex gap-2 group p-2 rounded-xl hover:bg-white/5 transition-colors">
                                 {/* Thumb */}
                                 <div className="w-40 aspect-video bg-zinc-900 rounded-lg overflow-hidden relative shrink-0">
                                     {rec.thumbnail && (
@@ -147,7 +146,7 @@ export default async function VideoPlayerPage(props: Props) {
                                         <span>{new Date(rec.createdAt).toLocaleDateString()}</span>
                                     </div>
                                 </div>
-                            </Link>
+                            </a>
                         ))}
                         {recommendations.length === 0 && (
                             <p className="text-xs text-zinc-600 px-2">No other videos found.</p>
