@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, Settings as SettingsIcon, X, Trash2 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { SettingsForm } from "./SettingsForm";
 import { useSettings } from "@/hooks/useSettings";
 
@@ -27,6 +28,7 @@ const recentViewers = new Set<string>();
 export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, serverDuration = 0 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const pathname = usePathname();
 
     // ⚙️ User Settings
     const { settings, loading: settingsLoading } = useSettings();
@@ -73,20 +75,33 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         return () => window.removeEventListener("click", handleClick);
     }, []);
 
-    // 🧹 Cleanup on Unmount (Stop Audio Ghosting 👻)
-    useEffect(() => {
-        const videoElement = videoRef.current;
-
-        return () => {
-            if (videoElement) {
-                console.log("🧹 Stopping Video Playback (Unmount)");
-                videoElement.pause();
-                videoElement.removeAttribute('src'); // Helper for React
-                videoElement.src = ""; // Force browser to stop download
-                videoElement.load(); // Reset element
-            }
-        };
+    const stopVideoPlayback = useCallback((video: HTMLVideoElement | null) => {
+        if (!video) return;
+        video.pause();
+        video.removeAttribute("src");
+        video.src = "";
+        video.load();
     }, []);
+
+    // 🧹 Cleanup on route/src changes and unmount (Stop Audio Ghosting 👻)
+    useEffect(() => {
+        return () => {
+            console.log("🧹 Stopping Video Playback (Cleanup)");
+            stopVideoPlayback(videoRef.current);
+        };
+    }, [pathname, src, stopVideoPlayback]);
+
+    // 🔇 Defensive cleanup: if another video element somehow remains, stop it.
+    useEffect(() => {
+        const currentVideo = videoRef.current;
+        if (!currentVideo) return;
+
+        document.querySelectorAll("video").forEach((video) => {
+            if (video !== currentVideo) {
+                stopVideoPlayback(video as HTMLVideoElement);
+            }
+        });
+    }, [pathname, src, stopVideoPlayback]);
 
     // 🔁 AB Loop State
     const [loopStart, setLoopStart] = useState<number | null>(null);
