@@ -112,8 +112,10 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     const getSpriteStyle = (time: number | null) => {
         if (time === null) return {};
         // Config must match server-side generation:
-        // Interval: 10s, Width: 160, Height: 90, Columns: 10
-        const interval = 10;
+        // Min interval: 10s, max frames: 100, Width: 160, Height: 90, Columns: 10
+        const maxImages = 100;
+        const minInterval = 10;
+        const interval = Math.max(minInterval, Math.ceil((serverDuration || duration || 0) / maxImages));
         const width = 160;
         const height = 90;
         const columns = 10;
