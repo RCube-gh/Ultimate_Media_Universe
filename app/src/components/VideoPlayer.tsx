@@ -98,9 +98,10 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
     // 🧹 Cleanup on route/src changes and unmount (Stop Audio Ghosting 👻)
     useEffect(() => {
+        const currentVideo = videoRef.current;
         return () => {
             console.log("🧹 Stopping Video Playback (Cleanup)");
-            stopVideoPlayback(videoRef.current);
+            stopVideoPlayback(currentVideo);
         };
     }, [pathname, src, stopVideoPlayback]);
 
