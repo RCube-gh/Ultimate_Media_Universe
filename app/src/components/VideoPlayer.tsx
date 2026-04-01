@@ -29,6 +29,7 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const pathname = usePathname();
+    const instanceIdRef = useRef(`vp-${Math.random().toString(36).slice(2, 8)}`);
 
     // ⚙️ User Settings
     const { settings, loading: settingsLoading } = useSettings();
@@ -77,11 +78,23 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
 
     const stopVideoPlayback = useCallback((video: HTMLVideoElement | null) => {
         if (!video) return;
+        console.log("[VideoPlayer]", instanceIdRef.current, "stop", {
+            id,
+            pathname,
+            src: video.currentSrc || src,
+        });
         video.pause();
         video.removeAttribute("src");
         video.src = "";
         video.load();
     }, []);
+
+    useEffect(() => {
+        console.log("[VideoPlayer]", instanceIdRef.current, "mount", { id, pathname, src });
+        return () => {
+            console.log("[VideoPlayer]", instanceIdRef.current, "unmount", { id, pathname, src });
+        };
+    }, [id, pathname, src]);
 
     // 🧹 Cleanup on route/src changes and unmount (Stop Audio Ghosting 👻)
     useEffect(() => {
@@ -748,8 +761,22 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
                 setDuration(video.duration);
             }
         };
-        const onPlay = () => setIsPlaying(true);
+        const onPlay = () => {
+            console.log("[VideoPlayer]", instanceIdRef.current, "play", {
+                id,
+                pathname,
+                src: video.currentSrc || src,
+                currentTime: video.currentTime,
+            });
+            setIsPlaying(true);
+        };
         const onPause = () => {
+            console.log("[VideoPlayer]", instanceIdRef.current, "pause", {
+                id,
+                pathname,
+                src: video.currentSrc || src,
+                currentTime: video.currentTime,
+            });
             setIsPlaying(false);
             if (video) saveProgress(video.currentTime); // 💾 Save immediately on pause
         };
