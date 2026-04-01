@@ -78,6 +78,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Prisma schema（必要な場合）
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/server-timeouts.js ./server-timeouts.js
 
 # 権限調整スクリプト
 COPY --chown=nextjs:nodejs entrypoint.sh ./
