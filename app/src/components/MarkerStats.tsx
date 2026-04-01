@@ -19,7 +19,7 @@ export function MarkerStats({ id }: { id: string }) {
 
             // 2. Fetch
             try {
-                const res = await fetch(`/api/media/${id}/markers`);
+                const res = await fetch(`/umu/api/media/${id}/markers`);
                 if (res.ok) {
                     const markers: { icon: string }[] = await res.json();
                     const count = markers.filter(m => m.icon === icon).length;

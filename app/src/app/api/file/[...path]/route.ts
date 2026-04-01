@@ -77,24 +77,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
         if (range) {
             const parts = range.replace(/bytes=/, "").split("-");
             const start = parseInt(parts[0], 10);
+            const fileEnd = fileSize - 1;
+            const requestedEnd = parts[1] ? parseInt(parts[1], 10) : fileEnd;
 
-            // 🚀 Optimized Chunking Strategy for Raspberry Pi
-            // Instead of streaming the whole file (which chokes the Pi), 
-            // we send small, manageable chunks (e.g., 2MB).
-            const MAX_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
-            const fileSizeRemaining = fileSize - 1;
-
-            let end = parts[1] ? parseInt(parts[1], 10) : fileSizeRemaining;
-
-            // Cap the chunk size to prevent memory pressure / connection timeout
-            if (end - start > MAX_CHUNK_SIZE) {
-                end = start + MAX_CHUNK_SIZE;
+            if (Number.isNaN(start) || Number.isNaN(requestedEnd) || start < 0 || start > requestedEnd || start >= fileSize) {
+                return new NextResponse("Requested Range Not Satisfiable", {
+                    status: 416,
+                    headers: {
+                        "Content-Range": `bytes */${fileSize}`,
+                        "Accept-Ranges": "bytes",
+                    },
+                });
             }
 
-            // Ensure we don't exceed file size
-            if (end > fileSizeRemaining) {
-                end = fileSizeRemaining;
-            }
+            const end = Math.min(requestedEnd, fileEnd);
 
             const chunksize = (end - start) + 1;
 
