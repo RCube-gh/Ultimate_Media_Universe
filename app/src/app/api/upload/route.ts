@@ -29,7 +29,7 @@ async function getVideoDuration(filePath: string): Promise<number | null> {
 
 // 🎞️ Helper: Generate Sprite Sheet
 async function generateSpriteSheet(videoPath: string, spritePath: string, duration: number) {
-    const maxImages = 200;
+    const maxImages = 100;
     const minInterval = 10;
     const interval = Math.max(minInterval, Math.ceil(duration / maxImages));
     const thumbWidth = 160;
