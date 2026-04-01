@@ -89,6 +89,13 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         video.load();
     }, []);
 
+    const stopAllVideoPlayback = useCallback(() => {
+        stopVideoPlayback(videoRef.current);
+        document.querySelectorAll("video").forEach((video) => {
+            stopVideoPlayback(video as HTMLVideoElement);
+        });
+    }, [stopVideoPlayback]);
+
     useEffect(() => {
         console.log("[VideoPlayer]", instanceIdRef.current, "mount", { id, pathname, src });
         return () => {
@@ -102,6 +109,11 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
         return () => {
             console.log("🧹 Stopping Video Playback (Cleanup)");
             stopVideoPlayback(currentVideo);
+            document.querySelectorAll("video").forEach((video) => {
+                if (video !== currentVideo) {
+                    stopVideoPlayback(video as HTMLVideoElement);
+                }
+            });
         };
     }, [pathname, src, stopVideoPlayback]);
 
@@ -116,6 +128,21 @@ export function VideoPlayer({ id, src, poster, className, initialLastPos = 0, se
             }
         });
     }, [pathname, src, stopVideoPlayback]);
+
+    useEffect(() => {
+        const handlePageLeave = () => {
+            console.log("[VideoPlayer]", instanceIdRef.current, "page-leave", { id, pathname, src });
+            stopAllVideoPlayback();
+        };
+
+        window.addEventListener("pagehide", handlePageLeave);
+        window.addEventListener("beforeunload", handlePageLeave);
+
+        return () => {
+            window.removeEventListener("pagehide", handlePageLeave);
+            window.removeEventListener("beforeunload", handlePageLeave);
+        };
+    }, [id, pathname, src, stopAllVideoPlayback]);
 
     // 🔁 AB Loop State
     const [loopStart, setLoopStart] = useState<number | null>(null);
