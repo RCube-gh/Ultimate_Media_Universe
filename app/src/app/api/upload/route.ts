@@ -29,7 +29,9 @@ async function getVideoDuration(filePath: string): Promise<number | null> {
 
 // 🎞️ Helper: Generate Sprite Sheet
 async function generateSpriteSheet(videoPath: string, spritePath: string, duration: number) {
-    const interval = 10;
+    const maxImages = 200;
+    const minInterval = 10;
+    const interval = Math.max(minInterval, Math.ceil(duration / maxImages));
     const thumbWidth = 160;
     const thumbHeight = 90;
     const columns = 10;
@@ -38,7 +40,7 @@ async function generateSpriteSheet(videoPath: string, spritePath: string, durati
 
     const cmd = `ffmpeg -y -i "${videoPath}" -vf "fps=1/${interval},scale=${thumbWidth}:${thumbHeight}:force_original_aspect_ratio=decrease,pad=${thumbWidth}:${thumbHeight}:(ow-iw)/2:(oh-ih)/2,tile=${columns}x${rows}" -frames:v 1 -q:v 2 "${spritePath}"`;
 
-    console.log(`🎬 Generating Sprite Sheet: ${spritePath}`);
+    console.log(`🎬 Generating Sprite Sheet: ${spritePath} | interval=${interval}s | frames=${totalImages}`);
 
     try {
         await execAsync(cmd);
